@@ -102,7 +102,7 @@ def interval_report(cfg: dict) -> str:
     a("")
     a("## 3. Coverage by year, event group, gap and volatility (pooled over markets)")
     a("")
-    a("Coverage in % of the primary method and of the naive comparator; `n` = forecasts with an interval at that level. Event groups follow the target date (see `docs/model_report.md`); the `mep` group starts at event E11, whose date is only medium-confidence, so it is unverified.")
+    a("Coverage in % of the primary method and of the naive comparator; `n` = forecasts with an interval at that level. Event groups follow the target date (see `docs/model_report.md`); the `mep` group is the Oct-Dec 2023 minimum-export-price period (event E11 verified against a Deccan Herald article dated 28 Oct 2023, ending the day before the E12 ban).")
     a("")
     for gt, title in [("year", "By target year"), ("event_group", "By event group (normal vs ban periods)"), ("gap_bucket", "By days since the previous quote before the origin"), ("vol_tercile", "By volatility tercile of the origin (within market)")]:
         t = by[(by["group_type"] == gt) & by["method"].isin([METHOD_LABEL["lgbm_abs"], METHOD_LABEL["naive_abs"]])].copy()
@@ -144,12 +144,16 @@ def anomaly_report(cfg: dict) -> str:
     a("")
     a("## Detectors (declared before any result was looked at)")
     a("")
-    a(f"- **Detector 1, `stl_residual` (retrospective).** STL with robust={ac['stl']['robust']} and period {ac['stl']['period']} on the weekly mean of log modal price (observed days only; a week needs at least {ac['stl']['min_days_per_week']} observed days). "
+    a(f"- **Detector 1, `stl_residual`: a retrospective large-swing detector, not a spike detector.** STL with robust={ac['stl']['robust']} and period {ac['stl']['period']} on the weekly mean of log modal price (observed days only; a week needs at least {ac['stl']['min_days_per_week']} observed days). "
       f"A week is flagged when |residual - median| > {ac['mad_threshold']} x {ac['mad_scale']} x MAD. **It uses data after the date as well, so it is historical labelling, not a real-time alert.** "
       "Unobserved weeks are bridged by linear interpolation only so that STL can run; they are never flagged and are not used for the median or MAD. The date reported is the Sunday that ends the week.")
     a(f"- **Detector 2, `forecast_surprise_h7` and `_h30` (usable in real time).** The realised quote falls outside the {int(ac['surprise']['level'] * 100)}% conformal interval of the headline LightGBM issued h days earlier (section 1 of `docs/interval_report.md`). Available for 2020-2024 only. `score` = (log realised - log forecast) / interval half-width, so |score| > 1 means outside.")
+    cd = ac["causal_daily"]
+    a(f"- **Detector 3, `causal_daily` (usable in real time; declared after the first Phase 4 review, run once, not tuned).** On observed quotes only: baseline = median of the log price of the previous {cd['baseline_quotes']} observed quotes; "
+      f"scale = {ac['mad_scale']} x MAD of the previous {cd['scale_changes']} observed daily log changes; flag if |log p_t - baseline| > {cd['k']:g} x scale. It uses only data before the quote being judged, so it could have raised the alert on the day. "
+      "`score` = (log p_t - baseline) / scale. Quotes without 90 prior changes are not scored.")
     a(f"- **Arrivals check.** `arrivals_z` = z-score of the mean log arrivals of the flagged week (or day) against the median and MAD of the log arrivals of the {ac['arrivals']['window_days']} days before it. A \"drop\" means z <= {ac['arrivals']['drop_z']}.")
-    a("- **Event-period labels** use only periods whose both end dates are high-confidence in `docs/eda_findings.md` (the 2019-20, 2020-21 and 2023-24 export bans and the COVID lockdown); `none` means outside those periods (the unverified Oct-Dec 2023 MEP period is not used).")
+    a("- **Event-period labels** use only periods whose both end dates are high-confidence in `docs/eda_findings.md`: the 2019-20, 2020-21 and 2023-24 export bans, the COVID lockdown and the Oct-Dec 2023 minimum-export-price period (E11 verified against a Deccan Herald article dated 28 Oct 2023; it ends 2023-12-07, so it does not overlap the ban); `none` means outside those periods.")
     a("- No causal claims are made anywhere: the table says when, where, how large, and what arrivals did.")
     a("- The full table is `results/anomalies.csv` (not committed: it lists individual market-dates); this document shows aggregates and a short excerpt.")
     a("")
@@ -179,7 +183,7 @@ def anomaly_report(cfg: dict) -> str:
     a("## 3. Validation without labels: a synthetic test of the detectors, not data")
     a("")
     a("**Synthetic test of the detector, not data.** Multiplicative spikes (price x (1 +/- magnitude)) were injected at random dates of 2020-2024 into an **in-memory copy** of the cleaned series; nothing was saved to `data/` and the real series is untouched. "
-      f"Each run places one spike of each type (magnitude x direction x duration) at least {ac['synthetic']['min_separation_days']} days apart; {ac['synthetic']['runs']} independent placements per market and market-horizon, so each cell below has "
+      f"Each run places one spike of each type (magnitude x direction x duration) at least {ac['synthetic']['min_separation_days']} days apart (detectors 1 and 3 are tested on exactly the same spike dates); {ac['synthetic']['runs']} independent placements per market and market-horizon, so each cell below has "
       f"{int(rec['spikes'].min())} or more spikes. Recall = share of injected spikes flagged in the right direction in the affected week(s) (STL) or on the affected target dates (forecast surprise). "
       "For the forecast-surprise detector the forecasts are the ones actually made (forecasts issued from inside a spike are not re-made, an approximation) and the conformal intervals are recomputed from the modified errors.")
     a("")

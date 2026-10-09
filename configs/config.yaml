@@ -91,7 +91,7 @@ eda:
     - {id: E10, date: "2021-01-01", kind: export, precision: day,     label: "Export ban lifted (notified 28 Dec 2020)",
        source: "https://www.udayavani.com/english-news/govt-lifts-export-ban-on-all-varieties-of-onion-from-january-1"}
     - {id: E11, date: "2023-10-28", kind: export, precision: day,     label: "MEP USD 800/t (to 31 Dec 2023)",
-       source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
+       source: "https://www.deccanherald.com/amp/story/business%2Fcentre-imposes-minimum-export-price-of-800-per-tonne-on-onion-till-dec-31-2746354"}
     - {id: E12, date: "2023-12-08", kind: export, precision: day,     label: "Export ban to 31 Mar 2024 (later extended)",
        source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
     - {id: E13, date: "2024-05-04", kind: export, precision: day,     label: "Ban lifted, MEP USD 550/t (+40% duty reported)",
@@ -184,7 +184,12 @@ anomalies:
   surprise: {level: 0.95, horizons: [7, 30]}
   arrivals: {window_days: 30, drop_z: -1.0}    # z-score of arrivals vs the trailing median; "drop" means z <= drop_z
   # Event-period labels use only periods whose both end dates are high-confidence in docs/eda_findings.md.
-  high_confidence_periods: [export_ban_2019_20, covid_lockdown_2020, export_ban_2020_21, export_ban_2023_24]
+  # mep_oct_dec_2023 (E11 to the day before E12) was verified by a Deccan Herald article dated 28 Oct 2023 and is high-confidence; it ends 2023-12-07, so it does not overlap the 2023-24 ban.
+  high_confidence_periods: [export_ban_2019_20, covid_lockdown_2020, export_ban_2020_21, mep_oct_dec_2023, export_ban_2023_24]
+  # Detector 3, `causal_daily` (declared after the first Phase 4 review; run once, no tuning): on OBSERVED quotes only,
+  # baseline = median of the log price of the previous `baseline_quotes` observed quotes; scale = mad_scale x MAD of the
+  # previous `scale_changes` observed daily log changes; flag if |log p_t - baseline| > k x scale. Uses only data before t.
+  causal_daily: {baseline_quotes: 28, scale_changes: 90, k: 4.0}
   # Synthetic test of the detectors (in memory only; never saved to data/). Spikes are multiplicative changes in price.
   synthetic:
     magnitudes: [0.25, 0.40, 0.60]

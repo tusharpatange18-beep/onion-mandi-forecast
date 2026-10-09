@@ -1,12 +1,16 @@
 """Phase 4B: anomaly detection in modal prices.
 
-Detector 1, `stl_residual` (RETROSPECTIVE, historical labelling: STL uses data after the date as well, so it cannot be an
-alert at the time): STL (robust, period 52) on the weekly mean of log modal price; a week is flagged when
+Detector 1, `stl_residual`: a RETROSPECTIVE LARGE-SWING DETECTOR, NOT A SPIKE DETECTOR (historical labelling: STL uses data after the
+date as well, so it cannot be an alert at the time): STL (robust, period 52) on the weekly mean of log modal price; a week is flagged when
 |resid - median(resid)| > mad_threshold * mad_scale * MAD(resid). Weeks without enough observed days are bridged by linear
 interpolation only to let STL run; such weeks are never flagged and never used for the median and MAD.
 
 Detector 2, `forecast_surprise_h{h}` (usable in real time): the realised quote falls outside the 95% conformal interval of the
 headline LightGBM that was issued h days earlier.
+
+Detector 3, `causal_daily` (usable in real time; declared after the first Phase 4 review, run once, not tuned): on OBSERVED quotes
+only, baseline = median of the log price of the previous 28 observed quotes; scale = 1.4826 x MAD of the previous 90 observed daily
+log changes; flag if |log p_t - baseline| > 4 x scale. Uses only data before the quote being judged.
 
 No causes are claimed anywhere: the output only says when, where, how large, and what arrivals did.
 
@@ -76,6 +80,36 @@ def stl_detect(weekly: pd.DataFrame, cfg: dict[str, Any], robust: bool | None = 
     return out
 
 
+# --------------------------------------------------------------------------- detector 3: causal daily
+def causal_daily_detect(g: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """Causal daily detector on one market's observed quotes (see the module docstring).
+
+    `g` has `date` and `modal_price` (NaN on days without a quote). For the t-th observed quote the baseline is the median of
+    the log prices of quotes t-28..t-1 and the scale is 1.4826 x MAD of the 90 observed log changes up to the change into quote
+    t-1; nothing from quote t or later is used. Quotes without 90 prior changes are not scored (NaN).
+    """
+    cd, ms = cfg["anomalies"]["causal_daily"], cfg["anomalies"]["mad_scale"]
+    nb, ns, k = cd["baseline_quotes"], cd["scale_changes"], cd["k"]
+    q = g[g["modal_price"] > 0][["date", "modal_price"]].reset_index(drop=True)
+    lp = np.log(q["modal_price"].to_numpy())
+    n = len(lp)
+    score, base = np.full(n, np.nan), np.full(n, np.nan)
+    if n >= ns + 2:
+        c = np.diff(lp)                                              # c[j] = change into quote j + 1
+        t = np.arange(ns + 1, n)
+        b = np.median(np.lib.stride_tricks.sliding_window_view(lp, nb)[t - nb], axis=1)          # quotes t-nb .. t-1
+        w = np.lib.stride_tricks.sliding_window_view(c, ns)[t - ns - 1]                          # changes up to the change into quote t-1
+        med = np.median(w, axis=1)
+        scale = ms * np.median(np.abs(w - med[:, None]), axis=1)
+        ok = scale > 0
+        sc = np.full(len(t), np.nan)
+        sc[ok] = (lp[t][ok] - b[ok]) / scale[ok]
+        score[t], base[t] = sc, b
+    flag = np.where(np.isnan(score), False, np.abs(np.nan_to_num(score)) > k)
+    return pd.DataFrame({"date": q["date"], "price": np.exp(lp), "expected": np.exp(base), "score": score, "flag": flag,
+                         "direction": np.where(score > 0, "up", "down")})
+
+
 # --------------------------------------------------------------------------- shared helpers
 def arrivals_z(daily: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, window_days: int, min_obs: int = 8) -> float:
     """z-score of the mean log arrivals on observed days in [start, end] against the median and MAD of the log arrivals
@@ -93,7 +127,7 @@ def arrivals_z(daily: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, wind
 
 
 def label_periods(dates: pd.Series, cfg: dict[str, Any]) -> pd.Series:
-    """Event-period label using only the high-confidence periods; 'none' outside them (the unverified MEP period is NOT used)."""
+    """Event-period label using only the high-confidence periods listed in the config; 'none' outside them."""
     keep = set(cfg["anomalies"]["high_confidence_periods"])
     periods = [p for p in cfg["forecast"]["event_periods"] if p["name"] in keep]
     return E.assign_period(dates, periods).replace("normal", "none")
@@ -135,6 +169,10 @@ def detect_all(cfg: dict[str, Any], panel: pd.DataFrame, intervals: pd.DataFrame
         flagged.append(pd.DataFrame({"market": m, "date": f.index, "detector": "stl_residual", "score": f["score"].to_numpy(),
                                      "direction": np.where(f["resid"] > 0, "up", "down"), "price": f["price"].to_numpy(),
                                      "expected": f["expected"].to_numpy()}))
+        c = causal_daily_detect(g.sort_values("date"), cfg)
+        cf = c[c["flag"]]
+        flagged.append(pd.DataFrame({"market": m, "date": cf["date"].to_numpy(), "detector": "causal_daily", "score": cf["score"].to_numpy(),
+                                     "direction": cf["direction"].to_numpy(), "price": cf["price"].to_numpy(), "expected": cf["expected"].to_numpy()}))
     sur = surprise_flags(intervals, ac["surprise"]["level"], ac["surprise"]["horizons"])
     tab = pd.concat(flagged + [sur], ignore_index=True)
     # arrivals z-score vs the trailing 30-day median (week for the STL detector, the day for the forecast-surprise detector)
@@ -177,6 +215,9 @@ def arrivals_check(tab: pd.DataFrame, weeks: pd.DataFrame, panel: pd.DataFrame, 
         g = intervals[(intervals["h"] == h)].dropna(subset=["lgbm_abs_lo_95"])
         sub = g.sample(min(len(g), 1500), random_state=0)
         base[f"forecast_surprise_h{h}"] = np.nanmean([arrivals_z(daily[r.market], r.target_date, r.target_date, wnd) <= dz for r in sub.itertuples()])
+    scored = pd.concat([causal_daily_detect(g.sort_values("date"), cfg).assign(market=m).dropna(subset=["score"]) for m, g in panel.groupby("market")])
+    sub = scored.sample(min(len(scored), 1500), random_state=0)
+    base["causal_daily"] = np.nanmean([arrivals_z(daily[r.market], r.date, r.date, wnd) <= dz for r in sub.itertuples()])
     rows = []
     for (det, direction), g in tab.groupby(["detector", "direction"]):
         has = g["arrivals_z"].notna()
@@ -304,6 +345,40 @@ def synthetic_surprise(cfg: dict[str, Any], frame: pd.DataFrame) -> tuple[pd.Dat
     return pd.DataFrame(rows), pd.DataFrame(fp_rows)
 
 
+def synthetic_causal(cfg: dict[str, Any], panel: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Recall and false-positive rate of the causal daily detector on spiked in-memory copies of the real series.
+
+    Same seed, candidate days and loop order as `synthetic_stl`, so the spikes are placed on the same dates. A spike is detected
+    if any of its days is flagged in the right direction. The false-positive rate is the share of scored non-spike quote days
+    in the evaluation window that are flagged (days after a spike are included, so any contamination of the baseline shows up).
+    """
+    sc = cfg["anomalies"]["synthetic"]
+    lo, hi = map(pd.Timestamp, sc["window"])
+    rng = np.random.default_rng(sc["seed"])
+    settings = make_settings(sc)
+    panel = panel.assign(market=panel["market_key"].map(F.short_name))
+    rows, fp_rows = [], []
+    for m, g in panel.groupby("market"):
+        g = g.sort_values("date")
+        cand = pd.DatetimeIndex(g.loc[g["modal_price"].notna() & (g["date"] >= lo) & (g["date"] <= hi - pd.Timedelta(days=3)), "date"])
+        base = causal_daily_detect(g, cfg)
+        inwin = base["date"].between(lo, hi) & base["score"].notna()
+        fp_rows.append({"market": m, "run": -1, "false_positive_rate": float(base.loc[inwin, "flag"].mean())})
+        for r in range(sc["runs"]):
+            spikes = place_spikes(cand, settings, sc["min_separation_days"], rng)
+            d = causal_daily_detect(inject_stl(g, spikes), cfg)
+            spike_days = set()
+            for sp in spikes:
+                spike_days |= set(sp["days"])
+                sel = d["date"].isin(sp["days"]) & d["score"].notna()
+                want_up = sp["direction"] == "up"
+                ok = bool((d.loc[sel, "flag"] & ((d.loc[sel, "score"] > 0) == want_up)).any())
+                rows.append({"market": m, "run": r, "magnitude": sp["magnitude"], "direction": sp["direction"], "duration": sp["duration"], "detected": ok})
+            clean = d["date"].between(lo, hi) & d["score"].notna() & ~d["date"].isin(spike_days)
+            fp_rows.append({"market": m, "run": r, "false_positive_rate": float(d.loc[clean, "flag"].mean())})
+    return pd.DataFrame(rows), pd.DataFrame(fp_rows)
+
+
 def synthetic_validation(cfg: dict[str, Any], panel: pd.DataFrame, frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Recall by spike type and false-positive rates for both detectors (synthetic test, not data)."""
     a, fa = synthetic_stl(cfg, panel)
@@ -312,7 +387,9 @@ def synthetic_validation(cfg: dict[str, Any], panel: pd.DataFrame, frame: pd.Dat
     a2, fa2 = synthetic_stl(cfg, panel, robust=False)
     a2["detector"], fa2["detector"] = "stl_residual_NONROBUST_diagnostic", "stl_residual_NONROBUST_diagnostic"
     b, fb = synthetic_surprise(cfg, frame)
-    det, fp = pd.concat([a, a2, b], ignore_index=True), pd.concat([fa, fa2, fb], ignore_index=True)
+    c3, fc3 = synthetic_causal(cfg, panel)
+    c3["detector"], fc3["detector"] = "causal_daily", "causal_daily"
+    det, fp = pd.concat([a, a2, b, c3], ignore_index=True), pd.concat([fa, fa2, fb, fc3], ignore_index=True)
     recall = det.groupby(["detector", "magnitude", "direction", "duration"]).agg(spikes=("detected", "size"), recall=("detected", "mean")).reset_index()
     recall.insert(0, "label", SYNTHETIC_LABEL)
     fpr = fp.assign(kind=np.where(fp["run"] < 0, "unmodified real series", "series with injected spikes (non-spike weeks/days)")) \

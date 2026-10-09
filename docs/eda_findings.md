@@ -150,7 +150,7 @@ Precision: **day** = date from a notification or order named in the source; **mo
 | E8 | 2020-06-01 | Unlock 1 begins (MHA guidelines of 30 May) | day | high | [MHA guidelines, 30 May 2020](https://www.covidlawlab.org/wp-content/uploads/2020/11/2020-05-30-MHA-Guidelines-to-Fight-COVID-19.pdf) |
 | E9 | 2020-09-14 | Export ban, all varieties | day | high | [Financial Express (BD)](https://old.thefinancialexpress.com.bd/trade/india-bans-onion-exports-1600095980) |
 | E10 | 2021-01-01 | Ban lifted (notified 28 Dec 2020) | day | high | [Udayavani](https://www.udayavani.com/english-news/govt-lifts-export-ban-on-all-varieties-of-onion-from-january-1) |
-| E11 | 2023-10-28 | MEP USD 800/t to 31 Dec 2023 | day | medium | [The Week](https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html) (confirm this article carries the date) |
+| E11 | 2023-10-28 | MEP USD 800/t to 31 Dec 2023 | day | high (verified by the student against an article dated 28 Oct 2023) | [Deccan Herald, 28 Oct 2023](https://www.deccanherald.com/amp/story/business%2Fcentre-imposes-minimum-export-price-of-800-per-tonne-on-onion-till-dec-31-2746354) |
 | E12 | 2023-12-08 | Export ban to 31 Mar 2024, later extended | day | high | [The Week](https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html) |
 | E13 | 2024-05-04 | Ban lifted, MEP USD 550/t (40% duty reported) | day | high | [The Week](https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html) |
 

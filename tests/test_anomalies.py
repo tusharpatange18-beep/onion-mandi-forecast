@@ -87,10 +87,13 @@ def test_arrivals_z_is_measured_against_the_trailing_window_before_the_period():
     assert np.isnan(AN.arrivals_z(d, days[3], days[3], 30))                  # fewer than 8 reference observations
 
 
-def test_event_labels_use_only_high_confidence_periods():
-    d = pd.Series(pd.to_datetime(["2020-04-10", "2020-10-15", "2023-11-15", "2022-06-01", "2024-01-10"]))
+def test_event_labels_use_only_high_confidence_periods_and_the_verified_mep_period_is_one_of_them():
+    d = pd.Series(pd.to_datetime(["2020-04-10", "2020-10-15", "2023-11-15", "2022-06-01", "2024-01-10", "2023-12-07", "2023-12-08"]))
     lab = AN.label_periods(d, CFG)
-    assert list(lab) == ["covid_lockdown_2020", "export_ban_2020_21", "none", "none", "export_ban_2023_24"]   # the unverified MEP period gives 'none'
+    assert list(lab) == ["covid_lockdown_2020", "export_ban_2020_21", "mep_oct_dec_2023", "none", "export_ban_2023_24", "mep_oct_dec_2023", "export_ban_2023_24"]
+    periods = {p["name"]: p for p in CFG["forecast"]["event_periods"]}
+    assert periods["mep_oct_dec_2023"]["end"] < periods["export_ban_2023_24"]["start"]          # no overlap with the ban
+    assert "mep_oct_dec_2023" in CFG["anomalies"]["high_confidence_periods"]
 
 
 def test_week_end_is_the_sunday_of_the_monday_to_sunday_week():
@@ -178,3 +181,70 @@ def test_robust_stl_can_absorb_a_large_isolated_down_spike_into_the_seasonal_par
     robust, plain = AN.stl_detect(w, CFG, robust=True), AN.stl_detect(w, CFG, robust=False)
     assert plain.loc[wk, "flag"] and plain.loc[wk, "resid"] < -0.5
     assert abs(robust.loc[wk, "resid"]) < 0.1 and not robust.loc[wk, "flag"]
+
+
+
+# ---------------------------------------------------------------- detector 3: causal daily
+def _daily(n=400, seed=0, level=7.0, noise=0.05):
+    rng = np.random.default_rng(seed)
+    days = pd.date_range("2018-01-01", periods=n)
+    return pd.DataFrame({"date": days, "modal_price": np.exp(level + rng.normal(0, noise, n)), "arrivals_tonnes": 10.0})
+
+
+def test_causal_daily_score_matches_a_hand_computation():
+    g = _daily(n=130, seed=1)
+    d = AN.causal_daily_detect(g, CFG)
+    lp = np.log(g["modal_price"].to_numpy())
+    t = 110                                                          # the 111th quote
+    base = np.median(lp[t - 28:t])                                   # previous 28 observed quotes
+    changes = np.diff(lp)[t - 91:t - 1]                              # the 90 observed daily log changes up to the change into quote t-1
+    assert len(changes) == 90
+    scale = 1.4826 * np.median(np.abs(changes - np.median(changes)))
+    assert np.isclose(d["score"].iloc[t], (lp[t] - base) / scale)
+    assert np.isclose(d["expected"].iloc[t], np.exp(base))
+    assert d["score"].iloc[:91].isna().all() and d["score"].iloc[91:].notna().all()       # needs 90 prior changes
+
+
+def test_causal_daily_uses_only_earlier_quotes():
+    g = _daily(n=300, seed=2)
+    a = AN.causal_daily_detect(g, CFG)
+    h = g.copy()
+    h.loc[h.index >= 200, "modal_price"] = 99999.0                  # change every quote from the 201st on
+    b = AN.causal_daily_detect(h, CFG)
+    pd.testing.assert_series_equal(a["score"].iloc[:200].reset_index(drop=True), b["score"].iloc[:200].reset_index(drop=True))
+    assert not np.isclose(a["score"].iloc[250], b["score"].iloc[250], equal_nan=True)
+
+
+def test_causal_daily_skips_days_without_a_quote_and_flags_a_planted_spike_in_the_right_direction():
+    g = _daily(n=400, seed=3)
+    g.loc[g.index % 7 == 6, "modal_price"] = np.nan                  # a weekly closure: not quotes, so they never enter the windows
+    g.loc[250, "modal_price"] *= 1.6
+    g.loc[301, "modal_price"] *= 0.4
+    d = AN.causal_daily_detect(g, CFG)
+    up = d[d["date"] == g.loc[250, "date"]].iloc[0]
+    down = d[d["date"] == g.loc[301, "date"]].iloc[0]
+    assert up["flag"] and up["direction"] == "up" and down["flag"] and down["direction"] == "down"
+    assert len(d) == int(g["modal_price"].notna().sum())
+    assert d["flag"].mean() < 0.03                                   # iid noise: very few false flags
+
+
+def test_synthetic_causal_detects_large_spikes_and_rarely_flags_ordinary_days():
+    rng = np.random.default_rng(5)
+    days = pd.date_range("2018-01-01", "2024-12-31")
+    panel = pd.DataFrame({"market_key": "Maharashtra_Pune_Pune", "date": days, "modal_price": np.exp(7 + rng.normal(0, 0.03, len(days))), "arrivals_tonnes": 10.0})
+    cfg = copy.deepcopy(CFG)
+    cfg["anomalies"]["synthetic"].update({"magnitudes": [0.02, 0.9], "runs": 3, "durations_days": [1, 3]})
+    det, fp = AN.synthetic_causal(cfg, panel)
+    rec = det.groupby("magnitude")["detected"].mean()
+    assert rec[0.9] > 0.95 and rec[0.02] < 0.1
+    assert fp[fp["run"] >= 0]["false_positive_rate"].mean() < 0.03
+
+
+def test_synthetic_causal_places_spikes_on_the_same_dates_as_the_stl_test():
+    """Same seed, candidate days and loop order: the placements of the two tests coincide, so the detectors are compared on the same spikes."""
+    rng1, rng2 = np.random.default_rng(7), np.random.default_rng(7)
+    cand = pd.date_range("2020-01-01", "2024-12-01")
+    settings = AN.make_settings(CFG["anomalies"]["synthetic"])
+    a = AN.place_spikes(cand, settings, 45, rng1)
+    b = AN.place_spikes(cand, settings, 45, rng2)
+    assert [x["start"] for x in a] == [x["start"] for x in b]
