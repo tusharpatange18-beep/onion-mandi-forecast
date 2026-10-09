@@ -24,7 +24,7 @@ def _fmt(df: pd.DataFrame) -> pd.DataFrame:
                 out[c] = out[c].round(1)
             elif c in ("DM",):
                 out[c] = out[c].round(2)
-            elif c in ("p_value",):
+            elif c in ("p_value", "p_holm"):
                 out[c] = out[c].round(4)
             elif c.startswith("MAE_log") or c.startswith("logMAE") or c.startswith("score") or c.startswith("fold_"):
                 out[c] = out[c].round(4)

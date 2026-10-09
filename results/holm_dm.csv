@@ -1,0 +1,11 @@
+market,h,model,strongest_baseline,DM,p_value,p_holm,significant_raw_5pct,significant_holm_5pct,bonferroni_threshold,significant_bonferroni
+Sambhajinagar,7,lgbm,base_mean3,4.058215069702617,5.2691658436909705e-05,0.000526916584369097,True,True,0.005,True
+Pune,30,lgbm,base_naive,2.056051048644982,0.0400414714151378,0.3603732427362402,True,False,0.005,False
+Vashi,30,lgbm,base_naive,1.7597046699100374,0.078795350280802,0.630362802246416,False,False,0.005,False
+Sambhajinagar,30,lgbm,base_mean3,1.6855649363962193,0.092206300606316,0.6454441042442121,False,False,0.005,False
+Pune,7,lgbm,base_naive,1.3809116656849607,0.167561112547635,1.0,False,False,0.005,False
+Kolhapur,30,lgbm,base_naive,1.2778028391259093,0.2016371274773658,1.0,False,False,0.005,False
+Solapur,7,lgbm,base_naive,1.1310385933282234,0.2583227964025807,1.0,False,False,0.005,False
+Solapur,30,lgbm,base_naive,0.920127569270068,0.3577935175970919,1.0,False,False,0.005,False
+Kolhapur,7,lgbm,base_naive,0.9021410986860892,0.3671711540311388,1.0,False,False,0.005,False
+Vashi,7,lgbm,base_naive,-0.6556301831827418,0.5121977169612371,1.0,False,False,0.005,False

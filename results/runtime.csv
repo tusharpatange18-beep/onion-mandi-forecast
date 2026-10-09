@@ -1,0 +1,8 @@
+model,cpu_seconds,fits,not_converged,cpu_seconds_per_fit
+ets|local_level,188.4,300,0,0.63
+lgbm|huber_nl16_mc20_n150,1083.8,120,0,9.03
+lgbm|huber_nl16_mc60_n150,1077.4,120,0,8.98
+prophet_anchored|cps0.05,1293.1,299,0,4.32
+prophet|cps0.05,1299.1,299,0,4.34
+prophet|cps0.3,1450.9,299,0,4.85
+sarima|011,425.7,300,2,1.42

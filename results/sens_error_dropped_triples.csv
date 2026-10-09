@@ -1,0 +1,11 @@
+column,cannot_forecast,total_triples,dropped_for_all_models_total
+base_naive,0,10416,254
+base_mean3,0,10416,254
+base_seasonal,254,10416,254
+ets|local_level,0,10416,254
+lgbm|huber_nl16_mc20_n150,0,10416,254
+lgbm|huber_nl16_mc60_n150,0,10416,254
+prophet_anchored|cps0.05,0,10416,254
+prophet|cps0.05,0,10416,254
+prophet|cps0.3,0,10416,254
+sarima|011,0,10416,254

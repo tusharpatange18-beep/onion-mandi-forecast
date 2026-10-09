@@ -1,0 +1,13 @@
+{
+  "git": {
+    "commit": "d2bfaec",
+    "dirty": false,
+    "selection_commit": "a440e84"
+  },
+  "bootstrap": {
+    "block_days": 30,
+    "resamples": 2000,
+    "seed": 42
+  },
+  "note": "analysis only; no model, selection or headline changed"
+}
