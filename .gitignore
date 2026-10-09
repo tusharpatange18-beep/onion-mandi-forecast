@@ -1,0 +1,14 @@
+# Data: never committed (large, derived from third-party source)
+data/
+results/*.parquet
+results/*.csv
+*.parquet
+
+# Environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.env

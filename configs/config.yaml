@@ -1,0 +1,41 @@
+# All paths, markets, horizons, seeds and model settings live here.
+seed: 42
+
+paths:
+  raw_file: data/raw/preprocessed_onion_2014_2024_prices_weather_events.parquet
+  interim: data/interim
+  processed: data/processed
+  panel: data/processed/panel.parquet
+  results: results
+  docs: docs
+
+data:
+  state: Maharashtra
+  start_date: "2014-01-01"
+  end_date: "2024-12-31"
+  # Raw columns we use. The file's lag/rolling/climate/price_spike columns are ignored on purpose.
+  keep_columns: [date, state, district, market, market_key, variety, arrivals_tonnes,
+                 min_price_rs_qtl, max_price_rs_qtl, modal_price_rs_qtl]
+  calendar_columns: [is_festival, festival_name, crop_season_onion]
+
+# Candidate markets, pending confirmation. primary_variety = most frequent variety in that market.
+markets:
+  - {market_key: Maharashtra_Pune_Pune, primary_variety: Local}
+  - {market_key: Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar, primary_variety: Other}
+  - {market_key: Maharashtra_Kolhapur_Kolhapur, primary_variety: Other}
+  - {market_key: Maharashtra_Sholapur_Solapur, primary_variety: Red}
+  - {market_key: Maharashtra_Jalgaon_Jalgaon, primary_variety: Red}
+
+cleaning:
+  max_ffill_gap_days: 3        # forward-fill only to build features, never for the target
+  stale_run_min_length: 5      # runs of identical (min, max, modal); rule to be proposed
+  outlier:
+    method: rolling_median_mad
+    window_days: 30
+    mad_threshold: 6.0
+
+backtest:
+  train_start: "2014-01-01"
+  first_test_date: "2020-01-01"
+  last_test_date: "2024-12-31"
+  horizons_days: [7, 30]
