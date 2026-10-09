@@ -110,7 +110,8 @@ def add_intervals(fr: pd.DataFrame, levels: list[float], window_days: int, min_e
         for tag, (fcol, scaled) in TAGS.items():
             e = (g["y_log"] - g[fcol]).abs().to_numpy()
             s = g["vol_scale"].to_numpy()
-            score = np.where((s > 0) & ~np.isnan(s), e / s, np.nan) if scaled else e
+            with np.errstate(divide="ignore", invalid="ignore"):
+                score = np.where((s > 0) & ~np.isnan(s), e / s, np.nan) if scaled else e
             q, n_cal = conformal_halfwidths(g["origin"].to_numpy(), g["target_date"].to_numpy(), score, levels, window_days, min_errors)
             if tag == "lgbm_abs":
                 out.loc[ix, "n_calib"] = n_cal
@@ -177,10 +178,9 @@ def coverage_bootstrap(g: pd.DataFrame, tag: str, level: float, markets: list[st
 
 
 # --------------------------------------------------------------------------- orchestration
-def run(cfg: dict[str, Any]) -> dict[str, pd.DataFrame]:
-    """Build intervals for the final window and write all tables to results/."""
-    ic, bs = cfg["intervals"], cfg["forecast"]["bootstrap"]
-    levels = sorted(set(ic["levels"]) | set(ic["calibration_levels"]))
+def build_frame(cfg: dict[str, Any]) -> pd.DataFrame:
+    """The calibration frame: final-window forecasts plus (if configured) the 2017-2019 tuning-run forecasts of the same frozen LightGBM."""
+    ic = cfg["intervals"]
     sel = yaml.safe_load((ROOT / cfg["forecast"]["selected_models_file"]).read_text(encoding="utf-8"))
     headline_cols = {int(h): d["lgbm"] for h, d in sel["chosen"].items()}
     fair = pd.read_parquet(ROOT / "results" / "fair_forecasts.parquet")
@@ -188,10 +188,16 @@ def run(cfg: dict[str, Any]) -> dict[str, pd.DataFrame]:
     vol = volatility_scale_table(panel, cfg["markets"], cfg["data"]["start_date"], cfg["data"]["end_date"], ic["vol_window_quotes"])
     tuning = None
     if ic["seed_with_tuning_forecasts"]:
-        run_dir = ROOT / cfg["forecast"]["runs_dir"] / sel["tuning_run"]
-        tuning = pd.read_parquet(run_dir / "forecasts.parquet")
+        tuning = pd.read_parquet(ROOT / cfg["forecast"]["runs_dir"] / sel["tuning_run"] / "forecasts.parquet")
         logger.info("seeding calibration with %d tuning-run forecasts from %s", len(tuning), sel["tuning_run"])
-    fr = calibration_frame(cfg, fair, tuning, headline_cols, vol)
+    return calibration_frame(cfg, fair, tuning, headline_cols, vol)
+
+
+def run(cfg: dict[str, Any]) -> dict[str, pd.DataFrame]:
+    """Build intervals for the final window and write all tables to results/."""
+    ic, bs = cfg["intervals"], cfg["forecast"]["bootstrap"]
+    levels = sorted(set(ic["levels"]) | set(ic["calibration_levels"]))
+    fr = build_frame(cfg)
     full = add_intervals(fr, levels, ic["calibration_window_days"], ic["min_errors"])
     fin = full[full["source"] == "final"].reset_index(drop=True)
     markets = sorted(fin["market"].unique())
