@@ -19,14 +19,24 @@ data:
   calendar_columns: [is_festival, festival_name, crop_season_onion]
   price_columns: [min_price_rs_qtl, max_price_rs_qtl, modal_price_rs_qtl]
 
-# Chosen markets (provisional). Changing the market list is a config edit only.
+# Chosen markets. Changing the market list is a config edit only.
 # The primary variety (most frequent variety in the market) is derived from the data, not set here.
 markets:
-  - Maharashtra_Pune_Pune
-  - Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar
-  - Maharashtra_Kolhapur_Kolhapur
   - Maharashtra_Sholapur_Solapur
-  - Maharashtra_Jalgaon_Jalgaon
+  - Maharashtra_Pune_Pune
+  - Maharashtra_Mumbai_Vashi New Mumbai
+  - Maharashtra_Kolhapur_Kolhapur
+  - Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar
+
+# Reviewer-approved corrections: these (market, date) modal prices are set to missing, never replaced by a
+# made-up value. The original stays in modal_price_raw. Each must currently be flagged as an outlier.
+corrections:
+  - {market_key: Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar, date: "2015-04-30"}
+  - {market_key: Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar, date: "2019-12-03"}
+  - {market_key: Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar, date: "2024-10-29"}
+  - {market_key: Maharashtra_Kolhapur_Kolhapur, date: "2015-06-22"}
+  - {market_key: Maharashtra_Kolhapur_Kolhapur, date: "2015-06-23"}
+  - {market_key: Maharashtra_Kolhapur_Kolhapur, date: "2023-08-04"}
 
 # Markets always shown in the ranking table, even if they miss the thresholds.
 ranking:

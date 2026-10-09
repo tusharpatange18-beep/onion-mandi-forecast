@@ -134,8 +134,52 @@ def test_filled_values_equal_last_observation(panel):
         assert (g.loc[f, "modal_price_ffill"] == last_obs[f]).all()
 
 
-def test_flags_do_not_change_values(panel):
-    raw = pd.read_parquet(ROOT / CFG["paths"]["raw_file"], columns=["market_key", "date", "variety", "modal_price_rs_qtl"],
-                          filters=[("state", "==", CFG["data"]["state"])])
-    m = panel.dropna(subset=["modal_price"]).merge(raw, on=["market_key", "date", "variety"], how="left")
-    assert (m["modal_price"] == m["modal_price_rs_qtl"]).all()
+def _raw_state_rows():
+    return pd.read_parquet(ROOT / CFG["paths"]["raw_file"],
+                           columns=["market_key", "date", "variety", "modal_price_rs_qtl", "min_price_rs_qtl", "max_price_rs_qtl"],
+                           filters=[("state", "==", CFG["data"]["state"])])
+
+
+def test_raw_columns_equal_the_source_file_and_are_never_modified(panel):
+    raw = _raw_state_rows()
+    obs = panel.dropna(subset=["modal_price_raw"])
+    m = obs.merge(raw, on=["market_key", "date", "variety"], how="left", validate="one_to_one")
+    assert (m["modal_price_raw"] == m["modal_price_rs_qtl"]).all()
+    assert (m["min_price_raw"] == m["min_price_rs_qtl"]).all()
+    assert (m["max_price_raw"] == m["max_price_rs_qtl"]).all()
+    # every source row of a chosen market's primary variety appears in the panel's raw column
+    assert panel["modal_price_raw"].notna().sum() == len(obs)
+
+
+def test_only_approved_corrections_changed_and_only_to_missing(panel):
+    corrected = panel[panel["was_corrected"]]
+    approved = {(c["market_key"], pd.Timestamp(c["date"])) for c in CFG["corrections"]}
+    assert set(zip(corrected["market_key"], corrected["date"])) == approved
+    assert corrected["modal_price"].isna().all() and corrected["modal_price_raw"].notna().all()
+    assert corrected["was_missing"].all()
+    untouched = panel[~panel["was_corrected"]]
+    same = (untouched["modal_price"] == untouched["modal_price_raw"]) | (untouched["modal_price"].isna() & untouched["modal_price_raw"].isna())
+    assert same.all()
+
+
+def test_corrected_days_are_not_in_the_filled_target(panel):
+    corrected = panel[panel["was_corrected"]]
+    assert corrected["modal_price"].isna().all()  # target stays missing even though a *_ffill value may exist
+
+
+def test_apply_corrections_refuses_unflagged_target():
+    g = pd.DataFrame({"market_key": "m", "date": pd.date_range("2020-01-01", periods=3), "modal_price": [1.0, 2.0, 3.0],
+                      "min_price": 1.0, "max_price": 3.0, "was_missing": False, "was_corrected": False,
+                      "is_outlier_flag": [False, False, False]})
+    with pytest.raises(ValueError):
+        clean.apply_corrections(g, [{"market_key": "m", "date": "2020-01-02"}], clean.CleaningLog())
+
+
+def test_apply_corrections_sets_missing_and_keeps_raw():
+    g = pd.DataFrame({"market_key": "m", "date": pd.date_range("2020-01-01", periods=3), "modal_price_raw": [1.0, 99.0, 3.0],
+                      "modal_price": [1.0, 99.0, 3.0], "min_price": 1.0, "max_price": 3.0, "was_missing": False,
+                      "was_corrected": False, "is_outlier_flag": [False, True, False]})
+    out = clean.apply_corrections(g, [{"market_key": "m", "date": "2020-01-02"}], clean.CleaningLog())
+    assert np.isnan(out.loc[1, "modal_price"]) and out.loc[1, "modal_price_raw"] == 99.0
+    assert out["was_corrected"].tolist() == [False, True, False]
+    assert g.loc[1, "modal_price"] == 99.0  # input frame is not mutated

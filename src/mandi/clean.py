@@ -199,11 +199,11 @@ def fill_short_gaps(s: pd.Series, max_gap: int) -> tuple[pd.Series, pd.Series]:
     return filled, fillable & filled.notna()
 
 
-def build_daily_panel(df: pd.DataFrame, calendar: pd.DataFrame, max_gap: int, log: CleaningLog) -> pd.DataFrame:
+def build_daily_grid(df: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     """Build the daily grid per market (first to last observed date), keeping missing days missing.
 
-    The target columns (`modal_price`, `min_price`, `max_price`, `arrivals_tonnes`) are never
-    filled. `*_ffill` columns exist for feature building only, with gaps > max_gap left missing.
+    `*_raw` columns hold the original quotes and are never modified afterwards. `modal_price`,
+    `min_price`, `max_price` and `arrivals_tonnes` are the target-side columns: missing days stay NaN.
     """
     out = []
     for mk, g in df.groupby("market_key", sort=False):
@@ -214,30 +214,70 @@ def build_daily_panel(df: pd.DataFrame, calendar: pd.DataFrame, max_gap: int, lo
         p["district"] = g["district"].iloc[0]
         p["market"] = g["market"].iloc[0]
         p["variety"] = g["variety"].iloc[0]
-        p["modal_price"] = g["modal_price_rs_qtl"]
-        p["min_price"] = g["min_price_rs_qtl"]
-        p["max_price"] = g["max_price_rs_qtl"]
+        p["modal_price_raw"] = g["modal_price_rs_qtl"]
+        p["min_price_raw"] = g["min_price_rs_qtl"]
+        p["max_price_raw"] = g["max_price_rs_qtl"]
+        p["modal_price"] = p["modal_price_raw"]
+        p["min_price"] = p["min_price_raw"]
+        p["max_price"] = p["max_price_raw"]
         p["arrivals_tonnes"] = g["arrivals_tonnes"]
         p["was_missing"] = p["modal_price"].isna()
+        p["was_corrected"] = False
         for c in ["is_stale", "is_order_violation"]:
             p[c] = g[c].reindex(grid).fillna(False).astype(bool)
+        out.append(p.reset_index())
+    return pd.concat(out, ignore_index=True).merge(calendar, on="date", how="left")
+
+
+def apply_corrections(panel: pd.DataFrame, corrections: list[dict[str, str]], log: CleaningLog) -> pd.DataFrame:
+    """Set the approved (market, date) quotes to missing, keeping the originals in the `*_raw` columns.
+
+    Each listed point must already be flagged as an outlier; otherwise the pipeline stops, so a
+    stale approval list can never silently change a different value. No replacement value is invented:
+    modal, min and max price of that day all become missing (a quote with a bad modal is not trusted
+    in part) and `was_corrected` is set.
+    """
+    panel = panel.copy()
+    for c in corrections:
+        sel = (panel["market_key"] == c["market_key"]) & (panel["date"] == pd.Timestamp(c["date"]))
+        if sel.sum() != 1:
+            raise ValueError(f"Correction target not found exactly once: {c}")
+        if not panel.loc[sel, "is_outlier_flag"].item():
+            raise ValueError(f"Correction target is not currently flagged as an outlier: {c}")
+        old = panel.loc[sel, "modal_price"].item()
+        panel.loc[sel, ["modal_price", "min_price", "max_price"]] = np.nan
+        panel.loc[sel, "was_missing"] = True
+        panel.loc[sel, "was_corrected"] = True
+        log.add("corrections", f"{c['market_key']} {c['date']}: approved by reviewer, modal price {old:.0f} set to missing", 1,
+                "set to missing (min/max too); original kept in *_raw", "was_corrected=True; no replacement value")
+    return panel
+
+
+def add_ffill_columns(panel: pd.DataFrame, max_gap: int, log: CleaningLog) -> pd.DataFrame:
+    """Add `*_ffill` columns for feature building: gaps of at most `max_gap` days are forward-filled.
+
+    Longer gaps stay missing. The target columns themselves are never filled.
+    """
+    out = []
+    for mk, g in panel.groupby("market_key", sort=False):
+        g = g.sort_values("date").copy()
         for c, nm in [("modal_price", "modal_price_ffill"), ("min_price", "min_price_ffill"),
                       ("max_price", "max_price_ffill"), ("arrivals_tonnes", "arrivals_ffill")]:
-            p[nm], mask = fill_short_gaps(p[c], max_gap)
+            g[nm], mask = fill_short_gaps(g[c], max_gap)
             if c == "modal_price":
-                p["was_filled"] = mask
-        out.append(p.reset_index())
-    panel = pd.concat(out, ignore_index=True).merge(calendar, on="date", how="left")
+                g["was_filled"] = mask
+        out.append(g)
+    panel = pd.concat(out, ignore_index=True)
     for mk, g in panel.groupby("market_key"):
         n_days, n_miss = len(g), int(g["was_missing"].sum())
         log.add("grid", f"{mk}: daily grid from first to last observed date; missing days kept missing",
-                n_miss, "added as missing rows (was_missing=True)",
+                n_miss, "missing days in the grid (was_missing=True)",
                 f"{n_days} days in span, {n_miss / n_days:.1%} missing; {int(g['was_filled'].sum())} filled for features (gaps <= {max_gap} days)")
     return panel
 
 
 # --------------------------------------------------------------------------- coverage / ranking
-def market_coverage(df: pd.DataFrame, total_days: int) -> pd.DataFrame:
+def market_coverage(df: pd.DataFrame, total_days: int, end_date: pd.Timestamp) -> pd.DataFrame:
     """Per-market coverage of the primary-variety series, plus median arrivals.
 
     `df` holds all rows of the state. Arrivals are taken once per market-day.
@@ -248,13 +288,13 @@ def market_coverage(df: pd.DataFrame, total_days: int) -> pd.DataFrame:
         pv = prim[mk]
         p = g[g["variety"] == pv].drop_duplicates("date").sort_values("date")
         d = p["date"]
-        span = (d.max() - d.min()).days + 1
+        own_span = (end_date - d.min()).days + 1  # first observed date to the end of the period
         rows.append({
             "market_key": mk, "district": g["district"].iloc[0], "primary_variety": pv,
             "primary_share_of_rows": round((g["variety"] == pv).mean(), 2),
             "first_date": d.min().date(), "last_date": d.max().date(), "observed_days": len(d),
             "longest_gap_days": int(d.diff().dt.days.max() - 1) if len(d) > 1 else 0,
-            "missing_in_span": round(1 - len(d) / span, 3), "missing_vs_full_period": round(1 - len(d) / total_days, 3),
+            "missing_vs_4018_days": round(1 - len(d) / total_days, 3), "missing_vs_own_span": round(1 - len(d) / own_span, 3),
             "median_arrivals_t": float(p["arrivals_tonnes"].median()),
         })
     return pd.DataFrame(rows).sort_values("observed_days", ascending=False).reset_index(drop=True)
