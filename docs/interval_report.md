@@ -95,7 +95,7 @@ LightGBM's interval is narrower than naive's in 20 of 20 market-horizon-level ce
 
 ## 3. Coverage by year, event group, gap and volatility (pooled over markets)
 
-Coverage in % of the primary method and of the naive comparator; `n` = forecasts with an interval at that level. Event groups follow the target date (see `docs/model_report.md`); the `mep` group starts at event E11, whose date is only medium-confidence, so it is unverified.
+Coverage in % of the primary method and of the naive comparator; `n` = forecasts with an interval at that level. Event groups follow the target date (see `docs/model_report.md`); the `mep` group is the Oct-Dec 2023 minimum-export-price period (event E11 verified against a Deccan Herald article dated 28 Oct 2023, ending the day before the E12 ban).
 
 ### By target year
 
@@ -197,7 +197,7 @@ Coverage in % of the primary method and of the naive comparator; `n` = forecasts
 Conformal prediction guarantees coverage on average, not within every kind of period, and the breakdowns show the gap plainly (section 3):
 
 - **Export-ban periods** (the 2019-20, 2020-21 and 2023-24 bans, whose dates are high-confidence in `docs/eda_findings.md`): the 80% interval covers **76.8%** at 7 days and **72.3%** at 30 days, and the 95% interval **94.5%** and **91.8%**.
-- **Oct-Dec 2023 minimum-export-price period** (starts at event E11, whose date is only medium-confidence, so **unverified**): 71.5% and **53.8%** for the 80% interval, 88.6% and **75.5%** for the 95% interval (n = 123 and 106). This is the worst case in the results.
+- **Oct-Dec 2023 minimum-export-price period** (event E11, 28 October 2023, verified against a Deccan Herald article of that date; the period ends the day before the E12 ban): 71.5% and **53.8%** for the 80% interval, 88.6% and **75.5%** for the 95% interval (n = 123 and 106). This is the worst case in the results.
 - **COVID lockdown:** 66.7% at 7 days for the 80% interval, but only 42 forecasts, so too few to read.
 - **Normal periods** are slightly **over**-covered (83.1% and 85.1% for 80%; 95.6% and 96.5% for 95%). The average coverage is right because normal periods over-cover and shocks under-cover.
 - By year, the weakest are 2023 (95% interval: 92.2% at 7 days, 93.6% at 30 days) and 2020 (30-day 80% interval: 78.2%); for 2023 the 80% interval covers 77.2% at 30 days.
@@ -212,8 +212,14 @@ It has the same overall coverage (80.0% and 79.9% at 80%; 94.3% and 93.9% at 95%
 ### 6.5 Limitations
 
 - Coverage is marginal, not conditional: it is right on average and wrong in shocks (6.3).
-- The 365-day trailing window reacts to a regime change only after the errors resolve, which for a 30-day horizon is 30 days later.
+- The 365-day trailing window reacts to a regime change only after the errors resolve, which for a 30-day horizon is 30 days later. **No adaptive variant was added** (decided at the Phase 4 review); see the next steps.
 - Intervals are symmetric on the log scale; that is a choice, not something tested against asymmetric alternatives.
 - Seeding used 2017-2019 forecasts that exist only in the local tuning run; reproducing this needs that run (`results/runs/` is not in git).
 - The block bootstrap resamples origin days, keeping the same days for all markets; the intervals for individual markets are wide because each has about 1,000 forecasts that are serially correlated.
 - Five markets that move together are not five independent tests (see `docs/model_report.md`, section 11).
+
+### 6.6 Next steps
+
+- **Adaptive conformal inference (ACI)**: update the working miscoverage level online after each resolved forecast, so that intervals widen quickly after a run of misses. This is the standard remedy for the shock under-coverage in 6.3 (export-ban periods, and especially the Oct-Dec 2023 MEP period). It would be a new, separately declared method; the primary method in this report is unchanged.
+- Re-test at the same breakdowns (event group, gap, volatility) and report whether conditional coverage in shocks improves, and at what cost in width.
+- A reproduction note: the seeded calibration needs the saved forecasts of the tuning run (`results/runs/tune_20261009_225301`), so the tuning run must be reproduced first.

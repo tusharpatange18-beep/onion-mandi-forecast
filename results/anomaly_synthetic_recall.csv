@@ -1,4 +1,16 @@
 label,detector,magnitude,direction,duration,spikes,recall
+"synthetic test of the detector, not data",causal_daily,0.25,down,1,100,0.35
+"synthetic test of the detector, not data",causal_daily,0.25,down,3,100,0.37
+"synthetic test of the detector, not data",causal_daily,0.25,up,1,100,0.24
+"synthetic test of the detector, not data",causal_daily,0.25,up,3,100,0.38
+"synthetic test of the detector, not data",causal_daily,0.4,down,1,100,0.63
+"synthetic test of the detector, not data",causal_daily,0.4,down,3,100,0.7
+"synthetic test of the detector, not data",causal_daily,0.4,up,1,100,0.45
+"synthetic test of the detector, not data",causal_daily,0.4,up,3,100,0.46
+"synthetic test of the detector, not data",causal_daily,0.6,down,1,100,0.89
+"synthetic test of the detector, not data",causal_daily,0.6,down,3,100,0.9
+"synthetic test of the detector, not data",causal_daily,0.6,up,1,100,0.57
+"synthetic test of the detector, not data",causal_daily,0.6,up,3,100,0.61
 "synthetic test of the detector, not data",forecast_surprise_h30,0.25,down,1,100,0.07
 "synthetic test of the detector, not data",forecast_surprise_h30,0.25,down,3,100,0.12
 "synthetic test of the detector, not data",forecast_surprise_h30,0.25,up,1,100,0.08

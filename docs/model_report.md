@@ -759,7 +759,7 @@ The 365-day seasonal-naive has a macro MAE of Rs 721.7 against Rs 226.0 for naiv
 
 ### 10.6 Events (only dates marked high-confidence in `docs/eda_findings.md`)
 
-Log-scale improvement of the headline over the strongest baseline, by the period of the target date (section 6). Periods whose both end dates are high-confidence: the 2019 export ban (E5-E6; only the part inside the test window, 1 January to 14 March 2020), the COVID lockdown (E7-E8), the 2020 export ban (E9-E10) and the 2023-24 export ban (E12-E13).
+Log-scale improvement of the headline over the strongest baseline, by the period of the target date (section 6). All five periods have both end dates marked high-confidence: the 2019 export ban (E5-E6; only the part inside the test window, 1 January to 14 March 2020), the COVID lockdown (E7-E8), the 2020 export ban (E9-E10), the Oct-Dec 2023 minimum-export-price period (E11-E12; E11, 28 October 2023, was verified against a Deccan Herald article of that date, and the period ends 2023-12-07, the day before the ban) and the 2023-24 export ban (E12-E13).
 
 | Period | 7 days | 30 days |
 |---|---|---|
@@ -767,9 +767,10 @@ Log-scale improvement of the headline over the strongest baseline, by the period
 | Export ban 2019-20, test-window part (E5-E6) | +11.2% (n = 234) | +29.9% (n = 133) |
 | COVID lockdown (E7-E8) | -2.8% (n = 42) | +7.0% (n = 38) |
 | Export ban 2020-21 (E9-E10) | +5.4% (n = 336) | +12.6% (n = 260) |
+| Oct-Dec 2023 MEP period (E11-E12) | +7.7% (n = 123) | +19.1% (n = 106) |
 | Export ban 2023-24 (E12-E13) | +1.0% (n = 460) | +10.2% (n = 399) |
 
-The gain is larger in the three export-ban periods than in normal periods (pooled: +4.9% against +2.4% at 7 days; +14.9% against +8.0% at 30 days). This is descriptive: ban periods also have the largest price moves, there are only three independent episodes, and nothing here shows that a ban caused anything. The COVID lockdown has too few forecasts to read. The **Oct-Dec 2023 minimum-export-price period** (section 6.2: +7.7% at 7 days, +19.1% at 30 days) starts at event E11, whose date is only medium-confidence in the EDA table (the cited article may not carry it), so **that row is unverified**.
+The gain is larger in the three export-ban periods than in normal periods (pooled: +4.9% against +2.4% at 7 days; +14.9% against +8.0% at 30 days) and larger still in the short MEP period (+7.7% and +19.1%). This is descriptive: these periods also have the largest price moves, there are only four independent episodes, and nothing here shows that a ban or a price floor caused anything. The COVID lockdown has too few forecasts to read.
 
 By gap before the origin (section 6.3): the gain holds when the previous quote is 1, 2 or 3-6 days earlier, but at 7 or more days it is negative (-29.9% at 7 days, n = 25; -13.8% at 30 days, n = 21): too few cases to be sure, but a sign that the model is least reliable after a long reporting gap.
 
@@ -807,6 +808,6 @@ Most of the 30-day gain disappears without the calendar features, and the other-
 - **The strongest baseline is chosen on the test window** (a conservative, hindsight choice that makes the benchmark harder). The bootstrap interval also holds that choice fixed; re-selecting the baseline in every resample changes the intervals only slightly (7 days [-0.2%, +5.0%]; 30 days [-1.9%, +14.1%]).
 - **One test period, one realisation:** 2020-2024 contains several price surges and three export-ban episodes; it is a single path and the year-to-year spread is large (section 5.1).
 - **Prophet is disadvantaged by the monthly refit design** (it does not update between refits), which is a property of the setup, not necessarily of the model; the anchored variant partly addresses this.
-- **Event dates are partly unverified:** see `docs/eda_findings.md`; only the high-confidence ones are named above.
+- **Some event dates remain unverified:** events E1-E4 are medium or low confidence in `docs/eda_findings.md`; none of them is used above.
 - **Data limits:** quotes are reported modal prices with a reporting lag, one variety per market, a quarter to a third of days missing, and a few quotes were set to missing by a reviewed rule (section 6 of the cleaning log). The derived Mendeley dataset's own preprocessing is undocumented.
 - **No weather features** in version 1 (planned as a later ablation).
