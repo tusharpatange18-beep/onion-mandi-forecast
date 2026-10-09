@@ -1,0 +1,56 @@
+# Written by `python -m mandi.run_phase3 tune`. Commit this file BEFORE running `final`.
+tuning_run: tune_20261009_225301
+window:
+- '2017-01-01'
+- '2019-12-31'
+chosen:
+  7:
+    ets: ets|local_level
+    lgbm: lgbm|huber_nl16_mc60_n150
+    prophet: prophet|cps0.3
+    prophet_anchored: prophet_anchored|cps0.05
+    sarima: sarima|011
+  30:
+    ets: ets|local_level
+    lgbm: lgbm|huber_nl16_mc20_n150
+    prophet: prophet|cps0.05
+    prophet_anchored: prophet_anchored|cps0.05
+    sarima: sarima|011
+best_model_by_validation:
+- market: Kolhapur
+  h: 7
+  model: lgbm
+- market: Kolhapur
+  h: 30
+  model: lgbm
+- market: Pune
+  h: 7
+  model: ets
+- market: Pune
+  h: 30
+  model: lgbm
+- market: Sambhajinagar
+  h: 7
+  model: lgbm
+- market: Sambhajinagar
+  h: 30
+  model: lgbm
+- market: Solapur
+  h: 7
+  model: lgbm
+- market: Solapur
+  h: 30
+  model: lgbm
+- market: Vashi
+  h: 7
+  model: lgbm
+- market: Vashi
+  h: 30
+  model: lgbm
+
+# Headline model (fixed before the 2020-2024 period was run): at each horizon, the family with the best pooled tuning score
+# (lowest mean log-MAE on the 2017-2019 folds, equal weight per market), using the frozen configurations in `chosen`.
+# The per-market choices in `best_model_by_validation` are a secondary 'per-cell tuning-selected' row, not the headline.
+headline_model_by_horizon:
+  7: lgbm
+  30: lgbm
