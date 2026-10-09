@@ -114,3 +114,37 @@ def test_gain_concentration_attributes_the_saving_to_the_large_moves():
     assert np.isclose(r["median_saving_rs"], 0.0)                                          # typical forecasts are unchanged
     assert np.isclose(r["mean_saving_rs_excluding_top"], 0.0)
     assert (g["market"] == "ALL (mean of markets)").sum() == 1
+
+
+def test_gain_concentration_all_row_share_is_pooled_not_an_average_of_ratios():
+    """Two markets: in A the whole saving is in the top 10% (share 100%); in B the total saving is tiny and negative
+    elsewhere. An average of the two ratios would be meaningless; the pooled share is sum(top savings) / sum(all savings)."""
+    rng = np.random.default_rng(1)
+    n = 1000
+    frames = []
+    for m, top_gain, rest_gain in [("A", 0.10, 0.0), ("B", 0.02, -0.001)]:
+        y = np.log(np.full(n, 1000.0))
+        e = rng.normal(0, 0.02, n)
+        big = np.arange(n) < 100
+        e[big] = 0.5
+        lg = np.where(big, e - top_gain * np.sign(e), e + rest_gain)
+        frames.append(pd.DataFrame({"market": m, "h": 7, "origin": pd.date_range("2020-01-01", periods=n), "y_log": y, "base_naive": y + e,
+                                    "base_mean3": y + e * 3, "base_seasonal": y + e * 9, "lgbm": y + lg, "ets": y, "sarima": y, "prophet": y, "prophet_anchored": y}))
+    f = pd.concat(frames, ignore_index=True)
+    summ = pd.DataFrame({"market": ["A", "B"], "h": [7, 7], "strongest_baseline": ["base_naive", "base_naive"]})
+    g = PH.gain_concentration(f, summ, {7: "lgbm"})
+    col = "share_of_total_saving_from_top_10pct_largest_baseline_errors_pct"
+    # recompute the pooled share by hand
+    top_sum = tot_sum = 0.0
+    for m, d in f.groupby("market"):
+        y = np.exp(d["y_log"].to_numpy())
+        eb, em = np.abs(y - np.exp(d["base_naive"].to_numpy())), np.abs(y - np.exp(d["lgbm"].to_numpy()))
+        s_ = eb - em
+        top = np.argsort(-eb)[:100]
+        top_sum += s_[top].sum()
+        tot_sum += s_.sum()
+    all_row = g[g["market"] == "ALL (mean of markets)"].iloc[0]
+    assert np.isclose(all_row[col], 100 * top_sum / tot_sum)
+    per_market = g[g["market"].isin(["A", "B"])][col]
+    assert not np.isclose(all_row[col], per_market.mean())          # it is not the average of the market ratios
+    assert np.isclose(all_row["mean_saving_rs"], g[g["market"].isin(["A", "B"])]["mean_saving_rs"].mean())  # other columns stay means of markets

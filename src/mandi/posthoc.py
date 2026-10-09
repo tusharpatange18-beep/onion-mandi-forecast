@@ -154,9 +154,13 @@ def gain_concentration(fair: pd.DataFrame, summ: pd.DataFrame, headline: dict[in
     Per market and horizon: the saving on each forecast is |baseline error| - |model error| (rupees). The table gives the
     share of the total saving that comes from the `top_share` of forecasts with the largest baseline errors (the large
     moves), the share of forecasts on which the model is better, the median saving, and the mean saving without the large moves.
+
+    In the "ALL (mean of markets)" row every column is the mean of the five market values EXCEPT the share column, which
+    is pooled: the sum over all markets of the savings in each market's top forecasts divided by the sum over all markets
+    of all savings (averaging ratios of totals that can be near zero or negative is not meaningful).
     """
     sb = summ.set_index(["market", "h"])["strongest_baseline"].to_dict()
-    rows = []
+    rows, sums = [], {}
     for (m, h), g in fair.groupby(["market", "h"]):
         y = np.exp(g["y_log"].to_numpy())
         e_b = np.abs(y - np.exp(g[sb[(m, h)]].to_numpy()))
@@ -166,6 +170,7 @@ def gain_concentration(fair: pd.DataFrame, summ: pd.DataFrame, headline: dict[in
         k = int(np.ceil(top_share * len(g)))
         top, rest = order[:k], order[k:]
         total = saving.sum()
+        sums[(h, m)] = (float(saving[top].sum()), float(total))
         rows.append({"market": m, "h": h, "n": len(g), "mean_saving_rs": saving.mean(), "median_saving_rs": float(np.median(saving)),
                      "share_of_forecasts_model_better_pct": 100 * float((saving > 0).mean()),
                      f"share_of_total_saving_from_top_{int(top_share * 100)}pct_largest_baseline_errors_pct": 100 * float(saving[top].sum() / total) if total > 0 else np.nan,
@@ -173,11 +178,16 @@ def gain_concentration(fair: pd.DataFrame, summ: pd.DataFrame, headline: dict[in
     t = pd.DataFrame(rows)
     macro = t.drop(columns="market").groupby("h").mean().reset_index()
     macro.insert(0, "market", "ALL (mean of markets)")
+    col = f"share_of_total_saving_from_top_{int(top_share * 100)}pct_largest_baseline_errors_pct"
+    for h in macro["h"]:
+        top_sum = sum(v[0] for (hh, _), v in sums.items() if hh == h)
+        all_sum = sum(v[1] for (hh, _), v in sums.items() if hh == h)
+        macro.loc[macro["h"] == h, col] = 100 * top_sum / all_sum if all_sum > 0 else np.nan
     return pd.concat([t, macro], ignore_index=True)
 
 
-def main() -> None:
-    """Write results/bootstrap_ci.csv, holm_dm.csv, loss_2021_by_month.csv and loss_2021_by_market.csv."""
+def main(only: str | None = None) -> None:
+    """Write results/bootstrap_ci.csv, holm_dm.csv, loss_2021_by_*.csv and gain_concentration.csv (only the last with only='gain')."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     cfg = load_config()
     bs = cfg["forecast"]["bootstrap"]
@@ -186,6 +196,10 @@ def main() -> None:
     fair = pd.read_parquet(ROOT / "results" / "fair_forecasts.parquet")
     summ = pd.read_csv(ROOT / "results" / "summary_table.csv")
     dm = pd.read_csv(ROOT / "results" / "dm_tests.csv")
+    if only == "gain":
+        gain_concentration(fair, summ, headline).to_csv(ROOT / "results" / "gain_concentration.csv", index=False)
+        logger.info("wrote results/gain_concentration.csv only")
+        return
     markets = sorted(fair["market"].unique())
     start, end = pd.Timestamp(cfg["backtest"]["first_test_date"]), pd.Timestamp(cfg["backtest"]["last_test_date"])
     rows = [bootstrap_ci(fair, h, markets, headline[h], start, end, bs["block_days"], bs["resamples"], bs["seed"]) for h in sorted(headline)]
@@ -202,4 +216,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(sys.argv[1] if len(sys.argv) > 1 else None)
