@@ -158,12 +158,14 @@ def _task_lgbm(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
     t0 = time.time()
     rows, n_fits = [], 0
     labelled = table[table["y_log"].notna()]
+    dropped = set(spec.p.get("drop", ()))  # feature names removed for the post-hoc ablation (empty for every normal run)
+    features = [f for f in F.FEATURE_COLUMNS if f not in dropped]
     for r, b_end in blocks:
         train = labelled[labelled["target_date"] < r]
         test = table[(table["origin"] >= r) & (table["origin"] <= b_end) & table["y_log"].notna()]
         if len(train) < 500 or len(test) == 0:
             continue
-        pred = M.lgbm_fit_predict(train, test, F.FEATURE_COLUMNS, spec.p, seed)
+        pred = M.lgbm_fit_predict(train, test, features, spec.p, seed)
         n_fits += 1
         rows.append(pd.DataFrame({"market_idx": test["market_idx"].to_numpy(), "origin": test["origin"].to_numpy(), "h": h,
                                   "f": test["p0"].to_numpy() + pred}))
@@ -271,14 +273,24 @@ def mase_scales(tables: dict[int, pd.DataFrame], train_end: str) -> dict[tuple[s
 
 
 # --------------------------------------------------------------------------- run logging
-def git_state() -> dict[str, Any]:
-    """Current commit and whether the working tree has uncommitted changes."""
+CODE_PATHS = ["src", "configs", "tests", "project.md"]  # "dirty" is judged on these only; results/ and docs/ are outputs
+
+
+def git_state(selection_file: str = "configs/selected_models.yaml") -> dict[str, Any]:
+    """Current commit, whether source/config/test files have uncommitted changes, and the commit that last touched the selection file.
+
+    results/ and docs/ are ignored for `dirty` because running the pipeline rewrites them.
+    """
+    def run(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
     try:
-        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip())
+        sha = run("rev-parse", "--short", "HEAD")
+        dirty = bool(run("status", "--porcelain", "--", *CODE_PATHS))
+        sel = run("log", "-1", "--format=%h", "--", selection_file) or None
     except Exception:
-        sha, dirty = "unknown", None
-    return {"commit": sha, "dirty": dirty}
+        sha, dirty, sel = "unknown", None, None
+    return {"commit": sha, "dirty": dirty, "selection_commit": sel}
 
 
 def log_run(kind: str, run_id: str, cfg: dict[str, Any], specs: list[Spec], tab: pd.DataFrame, timings: dict[str, Any], extra: dict[str, Any]) -> Path:
@@ -291,7 +303,7 @@ def log_run(kind: str, run_id: str, cfg: dict[str, Any], specs: list[Spec], tab:
     tab.to_parquet(d / "forecasts.parquet", index=False)
     log_path = ROOT / "results" / "run_log.csv"
     row = pd.DataFrame([{"run_id": run_id, "kind": kind, "when": pd.Timestamp.now().isoformat(timespec="seconds"), "commit": meta["git"]["commit"],
-                         "dirty": meta["git"]["dirty"], "config_sha1": meta["config_sha1"], "models": len(specs), "triples": len(tab),
+                         "dirty": meta["git"]["dirty"], "selection_commit": meta["git"]["selection_commit"], "config_sha1": meta["config_sha1"], "models": len(specs), "triples": len(tab),
                          "wall_seconds": timings["wall_seconds"]}])
     row.to_csv(log_path, mode="a", header=not log_path.exists(), index=False)
     return d

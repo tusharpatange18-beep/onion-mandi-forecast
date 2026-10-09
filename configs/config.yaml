@@ -142,3 +142,9 @@ forecast:
     - {name: export_ban_2020_21, group: export_ban, start: "2020-09-14", end: "2020-12-31"}   # E9 to E10
     - {name: mep_oct_dec_2023, group: mep, start: "2023-10-28", end: "2023-12-07"}            # E11 to E12
     - {name: export_ban_2023_24, group: export_ban, start: "2023-12-08", end: "2024-05-03"}   # E12 to E13
+  # Post-hoc feature-group ablation of the frozen LightGBM (not used for any choice).
+  ablation_groups:
+    calendar: [target_month, target_woy, target_dow, origin_dow, target_expected_closed]
+    other_market: [xm_chg_7, xm_chg_28, rel_level]
+    mean_reversion: [dev3, dev30]
+    days_since_last_quote: [gap_prev]
