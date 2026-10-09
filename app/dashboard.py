@@ -44,15 +44,21 @@ with tab_f:
     if err:
         st.error(err)
     else:
-        hist_json, _ = D.api_get("/forecast/history", {"market": market, "horizon": horizon})
         history = D.price_history(market, D.SV["dashboard"]["history_days"])
+        since = history["date"].min() if history is not None and len(history) else None
+        backtest = D.backtest_forecasts(market, horizon, since)
         anomalies = D.read_anomalies()
+        fpr = D.detector_false_positive_rates()
         dets = sorted(anomalies["detector"].unique()) if anomalies is not None else []
-        chosen = st.multiselect("Anomaly flags to show", dets, default=[d for d in dets if d.startswith("forecast_surprise")]) if dets else []
+        default = [d for d in dets if d == f"forecast_surprise_h{horizon}"]
+        label = lambda d: f"{d} (flags {100 * fpr[d]:.1f}% of ordinary dates)" if d in fpr else d  # noqa: E731
+        chosen = st.multiselect("Anomaly layers (default: the forecast-surprise detector for this horizon)", dets, default=default, format_func=label) if dets else []
         flags = None
-        if anomalies is not None and chosen and history is not None and len(history):
-            flags = anomalies[(anomalies["market"] == market) & anomalies["detector"].isin(chosen) & (anomalies["date"] >= history["date"].min())]
-        st.plotly_chart(D.forecast_figure(market, horizon, history, latest, hist_json["rows"] if hist_json else None, flags), width="stretch")
+        if anomalies is not None and chosen and since is not None:
+            flags = anomalies[(anomalies["market"] == market) & anomalies["detector"].isin(chosen) & (anomalies["date"] >= since)]
+        st.plotly_chart(D.forecast_figure(market, horizon, history, latest, backtest, flags), width="stretch")
+        if backtest is None:
+            st.info("Out-of-sample backtest forecasts (results/interval_forecasts.parquet) are not available, so only the latest forecast is drawn.")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric(f"Forecast for {latest['target_date']} (Rs/quintal)", f"{latest['point']:,.0f}", f"{latest['point'] - latest['naive']:+,.0f} vs naive")
         m2.metric("80% interval", f"{latest['lo80']:,.0f} to {latest['hi80']:,.0f}")
@@ -62,7 +68,8 @@ with tab_f:
         for c in latest["caveats"]:
             st.markdown(f"- {c}")
         st.caption(f"Model `{latest['model_spec']}`, trained on rows whose target date is before {latest['as_of']}; intervals calibrated on {latest['n_calibration']} resolved out-of-sample errors; "
-                   f"generated {latest['generated_at']} (commit {latest['git_commit']}). Recent forecasts whose target has passed were fitted on that very row, so they are shown in grey and are not a test of accuracy.")
+                   f"generated {latest['generated_at']} (commit {latest['git_commit']}). The blue band is the out-of-sample backtest (forecasts made by models that had not seen the target); "
+                   "the latest forecast is the only forward-looking one.")
 
 # ---------------------------------------------------------------------------------------------- Backtest
 with tab_b:
@@ -124,7 +131,11 @@ with tab_a:
     if flags is None:
         st.info("results/anomalies.csv is not available (it is generated locally and not committed): run `python -m mandi.anomalies`.")
     else:
-        chosen = st.multiselect("Detectors", sorted(flags["detector"].unique()), default=["forecast_surprise_h7"], key="adet")
+        fpr_a = D.detector_false_positive_rates()
+        opts = sorted(flags["detector"].unique())
+        chosen = st.multiselect("Detectors (default: forecast surprise for this horizon; the others are noisy comparators)", opts,
+                                default=[d for d in opts if d == f"forecast_surprise_h{horizon}"], key="adet",
+                                format_func=lambda d: f"{d} (flags {100 * fpr_a[d]:.1f}% of ordinary dates)" if d in fpr_a else d)
         sel = flags[(flags["market"] == market) & flags["detector"].isin(chosen)].sort_values("date", ascending=False)
         st.caption(f"{len(sel)} flags for {market} (showing the latest 500)")
         st.dataframe(sel.head(500)[["date", "detector", "direction", "score", "price", "expected", "arrivals_z", "event_period", "other_markets_flagged_same_week"]].round({"score": 2, "price": 1, "expected": 1, "arrivals_z": 2}), hide_index=True)

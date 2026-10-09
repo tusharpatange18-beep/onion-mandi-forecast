@@ -39,6 +39,14 @@ def world(tmp_path, monkeypatch):
     anomalies = pd.DataFrame({"market": ["Pune"] * 2, "date": pd.to_datetime(["2024-06-01", "2024-09-01"]), "detector": "forecast_surprise_h7", "score": [2.1, -2.3], "direction": ["up", "down"],
                               "price": [1000.0, 1050.0], "expected": [800.0, 1400.0], "arrivals_z": [0.1, -1.5], "event_period": "none", "other_markets_flagged_same_week": [True, False]})
     anomalies.to_csv(res / "anomalies.csv", index=False)
+    tgt = pd.date_range("2024-03-01", "2024-12-31")
+    rows = []
+    for h in (7, 30):
+        rows.append(pd.DataFrame({"market": "Pune", "h": h, "target_date": tgt, "f_lgbm": np.log(1000.0), "lgbm_abs_lo_80": np.log(900.0), "lgbm_abs_hi_80": np.log(1110.0),
+                                  "lgbm_abs_lo_95": np.log(800.0), "lgbm_abs_hi_95": np.log(1250.0)}))
+    pd.concat(rows).to_parquet(res / "interval_forecasts.parquet", index=False)
+    pd.DataFrame({"label": "synthetic test of the detector, not data", "detector": ["forecast_surprise_h7", "forecast_surprise_h30", "stl_residual", "causal_daily"],
+                  "kind": "unmodified real series", "false_positive_rate": [0.048, 0.049, 0.187, 0.196], "n": 5}).to_csv(res / "anomaly_synthetic_fpr.csv", index=False)
     monkeypatch.setattr(D, "RESULTS", res)
     monkeypatch.setattr(D, "PANEL", tmp_path / "panel.parquet")
     client = TestClient(create_app(f, res))
@@ -69,17 +77,32 @@ def test_price_history_returns_the_last_days_of_one_market_only(world):
     assert D.price_history("Solapur", 30) is None
 
 
-def test_forecast_figure_has_history_bands_naive_and_flags(world):
+def test_forecast_figure_draws_the_out_of_sample_backtest_and_only_the_latest_forecast_as_forward_looking(world):
     latest, _ = D.api_get("/forecast", {"market": "Pune", "horizon": 30})
-    hist, _ = D.api_get("/forecast/history", {"market": "Pune", "horizon": 30})
-    fig = D.forecast_figure("Pune", 30, D.price_history("Pune", 365), latest, hist["rows"], D.read_anomalies())
+    hist = D.price_history("Pune", 365)
+    bt = D.backtest_forecasts("Pune", 30, hist["date"].min())
+    fig = D.forecast_figure("Pune", 30, hist, latest, bt, D.read_anomalies())
     names = [t.name for t in fig.data]
-    assert "observed modal price" in names and "LightGBM forecast" in names and "naive forecast (last price)" in names
-    assert "95% interval" in names and "80% interval" in names and any(n and n.startswith("anomaly flag") for n in names)
-    assert any("in sample" in (n or "") for n in names) and any("out of sample" in (n or "") for n in names)
-    # the forecast marker sits at the target date with the API's numbers
-    f = [t for t in fig.data if t.name == "LightGBM forecast"][0]
+    assert "observed modal price" in names and "naive forecast (last price)" in names
+    assert "backtest forecast (out of sample)" in names and "backtest 80% interval (out of sample)" in names and "backtest 95% interval (out of sample)" in names
+    assert "latest LightGBM forecast (forward-looking)" in names and any(n and n.startswith("anomaly flag") for n in names)
+    assert not any("in sample" in (n or "").replace("out of sample", "") for n in names)        # no in-sample forecast is drawn
+    f = [t for t in fig.data if t.name == "latest LightGBM forecast (forward-looking)"][0]
     assert pd.Timestamp(f.x[-1]) == pd.Timestamp(latest["target_date"]) and f.y[-1] == latest["point"]
+    # backtest values come from the file (exp of the log columns)
+    b = [t for t in fig.data if t.name == "backtest forecast (out of sample)"][0]
+    assert np.allclose(np.asarray(b.y, dtype=float), 1000.0)
+
+
+def test_backtest_forecasts_are_read_from_the_interval_file_and_filtered(world):
+    bt = D.backtest_forecasts("Pune", 7, pd.Timestamp("2024-06-01"))
+    assert bt["target_date"].min() >= pd.Timestamp("2024-06-01") and np.allclose(bt["lo80"], 900.0) and np.allclose(bt["hi95"], 1250.0)
+    assert D.backtest_forecasts("Solapur", 7) is None
+
+
+def test_detector_false_positive_rates_come_from_the_results_file(world):
+    r = D.detector_false_positive_rates()
+    assert r["forecast_surprise_h7"] == 0.048 and r["causal_daily"] == 0.196
 
 
 def test_tie_note_is_built_from_the_results_tables(world):
@@ -164,3 +187,13 @@ def test_page_renders_against_the_real_results_and_forecasts(monkeypatch):
             at.selectbox[0].select(market).run()
             at.selectbox[1].select(h).run()
             assert not at.exception, (market, h, at.exception)
+
+
+def test_default_anomaly_layer_is_the_forecast_surprise_detector_for_the_horizon_and_labels_show_false_positive_rates(world):
+    at = _run()
+    at.selectbox[0].select("Pune").run()
+    ms = at.multiselect[0]
+    assert ms.value == ["forecast_surprise_h7"]
+    assert any("forecast_surprise_h7 (flags 4.8% of ordinary dates)" in o for o in ms.options)
+    at.selectbox[1].select(30).run()
+    assert at.multiselect[0].value == ["forecast_surprise_h30"] or at.multiselect[0].value == []   # h30 flags absent in the fixture -> empty default

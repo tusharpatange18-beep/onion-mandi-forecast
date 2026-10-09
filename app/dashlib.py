@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -70,27 +71,53 @@ def price_history(market: str, days: int) -> pd.DataFrame | None:
     return p[p["date"] > p["date"].max() - pd.Timedelta(days=days)][["date", "modal_price"]]
 
 
+def backtest_forecasts(market: str, horizon: int, since: pd.Timestamp | None = None) -> pd.DataFrame | None:
+    """Out-of-sample backtest forecasts of the headline LightGBM with their conformal intervals (results/interval_forecasts.parquet,
+    2020-2024 target dates). These were made by models that had not seen the target, unlike recent rows of the serving file."""
+    p = RESULTS / "interval_forecasts.parquet"
+    if not p.exists():
+        return None
+    cols = ["market", "h", "target_date", "f_lgbm", "lgbm_abs_lo_80", "lgbm_abs_hi_80", "lgbm_abs_lo_95", "lgbm_abs_hi_95"]
+    t = pd.read_parquet(p, columns=cols)
+    t = t[(t["market"] == market) & (t["h"] == horizon)].dropna(subset=["lgbm_abs_lo_80"])
+    if since is not None:
+        t = t[t["target_date"] >= since]
+    if t.empty:
+        return None
+    return pd.DataFrame({"target_date": t["target_date"], "point": np.exp(t["f_lgbm"]), "lo80": np.exp(t["lgbm_abs_lo_80"]), "hi80": np.exp(t["lgbm_abs_hi_80"]),
+                         "lo95": np.exp(t["lgbm_abs_lo_95"]), "hi95": np.exp(t["lgbm_abs_hi_95"])}).sort_values("target_date")
+
+
+def detector_false_positive_rates() -> dict[str, float]:
+    """False-positive rate (share of ordinary dates flagged, unmodified real series) per detector, from results/anomaly_synthetic_fpr.csv."""
+    f = read_table("anomaly_synthetic_fpr")
+    if f is None:
+        return {}
+    f = f[f["kind"].str.startswith("unmodified")]
+    return dict(zip(f["detector"], f["false_positive_rate"]))
+
+
 # --------------------------------------------------------------------------- figures
-def forecast_figure(market: str, horizon: int, history: pd.DataFrame | None, latest: dict | None, recent: list[dict] | None,
+def forecast_figure(market: str, horizon: int, history: pd.DataFrame | None, latest: dict | None, backtest: pd.DataFrame | None,
                     flags: pd.DataFrame | None) -> go.Figure:
-    """Price history, the latest forecast with 80% and 95% bands, the naive forecast, recent forecasts and anomaly markers."""
+    """Price history, out-of-sample backtest forecasts with their 80% and 95% bands, the latest (forward-looking) forecast, the naive
+    forecast and anomaly markers. No in-sample forecast is drawn."""
     fig = go.Figure()
+    if backtest is not None and len(backtest):
+        b = backtest
+        fig.add_trace(go.Scatter(x=pd.concat([b["target_date"], b["target_date"][::-1]]), y=pd.concat([b["hi95"], b["lo95"][::-1]]), fill="toself", fillcolor="rgba(0,114,178,0.10)",
+                                 line=dict(width=0), name="backtest 95% interval (out of sample)", hoverinfo="skip"))
+        fig.add_trace(go.Scatter(x=pd.concat([b["target_date"], b["target_date"][::-1]]), y=pd.concat([b["hi80"], b["lo80"][::-1]]), fill="toself", fillcolor="rgba(0,114,178,0.22)",
+                                 line=dict(width=0), name="backtest 80% interval (out of sample)", hoverinfo="skip"))
+        fig.add_trace(go.Scatter(x=b["target_date"], y=b["point"], mode="lines", name="backtest forecast (out of sample)", line=dict(color=BLUE, width=1)))
     if history is not None and len(history):
         fig.add_trace(go.Scatter(x=history["date"], y=history["modal_price"], mode="lines+markers", name="observed modal price", line=dict(color="black", width=1), marker=dict(size=3)))
-    if recent:
-        r = pd.DataFrame(recent).dropna(subset=["lo80", "hi80"])
-        r["target_date"] = pd.to_datetime(r["target_date"])
-        for flag, name, color in [(True, "recent forecasts, in sample (fitted on the target)", GREY), (False, "recent forecasts, out of sample", BLUE)]:
-            s = r[r["in_sample"] == flag].sort_values("target_date")
-            if len(s):
-                fig.add_trace(go.Scatter(x=s["target_date"], y=s["point"], mode="markers", name=name, marker=dict(size=4, color=color, opacity=0.6),
-                                         error_y=dict(type="data", symmetric=False, array=(s["hi80"] - s["point"]), arrayminus=(s["point"] - s["lo80"]), thickness=0.6, width=0, color=color)))
     if latest:
         t = pd.Timestamp(latest["target_date"])
         o = pd.Timestamp(latest["origin_date"])
         for lvl, lo, hi, w in [("95%", "lo95", "hi95", 2), ("80%", "lo80", "hi80", 6)]:
-            fig.add_trace(go.Scatter(x=[t, t], y=[latest[lo], latest[hi]], mode="lines", name=f"{lvl} interval", line=dict(color=ORANGE if lvl == "80%" else "#f5c27a", width=w + 2)))
-        fig.add_trace(go.Scatter(x=[o, t], y=[latest["last_price"], latest["point"]], mode="lines+markers", name="LightGBM forecast", line=dict(color=BLUE, dash="dot"), marker=dict(size=[0, 11], color=BLUE)))
+            fig.add_trace(go.Scatter(x=[t, t], y=[latest[lo], latest[hi]], mode="lines", name=f"latest forecast {lvl} interval", line=dict(color=ORANGE if lvl == "80%" else "#f5c27a", width=w + 2)))
+        fig.add_trace(go.Scatter(x=[o, t], y=[latest["last_price"], latest["point"]], mode="lines+markers", name="latest LightGBM forecast (forward-looking)", line=dict(color=BLUE, dash="dot"), marker=dict(size=[0, 11], color=BLUE)))
         fig.add_trace(go.Scatter(x=[t], y=[latest["naive"]], mode="markers", name="naive forecast (last price)", marker=dict(size=10, symbol="diamond-open", color=RED)))
     if flags is not None and len(flags):
         for d, grp in flags.groupby("detector"):
