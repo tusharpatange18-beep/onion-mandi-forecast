@@ -225,7 +225,8 @@ def build() -> str:
         a("### 5.4 Where does the mean gain come from? (analysis only)")
         a("")
         a("Saving on each forecast = |strongest-baseline error| - |headline error| in rupees. The table shows how much of the total saving comes from the 10% of forecasts with the largest baseline errors (the large moves), "
-          "the share of forecasts on which the model is better, and the typical (median) saving. A mean gain that comes from the large moves with a zero median saving means the model is tied on ordinary days.")
+          "the share of forecasts on which the model is better, and the typical (median) saving. A mean gain that comes from the large moves with a zero median saving means the model is tied on ordinary days. "
+          "In the ALL row the share is pooled over markets (sum of the savings in each market's top 10% divided by the sum of all savings); a share above 100% means the other 90% of forecasts have a net negative saving.")
         a("")
         a(_md(gc))
         a("")
