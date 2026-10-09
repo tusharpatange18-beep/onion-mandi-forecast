@@ -741,7 +741,7 @@ Per market:
 
 ### 10.3 2021 is a loss year at both horizons
 
-- Macro improvement by target year (7 days / 30 days): 2020 +6.4% / +16.2%, **2021 -2.5% / -10.7%**, 2022 +2.5% / +11.6%, 2023 +5.2% / +18.0%, 2024 +1.2% / +4.5%.
+- Macro improvement by target year (7 days / 30 days): 2020 +6.4% / +16.1%, **2021 -2.5% / -10.7%**, 2022 +2.4% / +11.6%, 2023 +5.2% / +18.0%, 2024 +1.2% / +4.5%.
 - At 30 days LightGBM loses to the strongest baseline in **all five markets** in 2021 (-6.6% to -17.3%), against +9.7% to +16.8% in the other years. At 7 days it loses in Pune (-5.6%) and Vashi (-13.8%) and is slightly positive elsewhere.
 - By month (section 5.3), the 2021 excess error is concentrated, not spread out. At 30 days, February accounts for 70% of the year's net excess absolute error, November 49%, January 35% and August 27%, offset by June (-38%), March (-36%) and October (-15%). At 7 days: February 91%, December 57%, August 34%.
 - What the data does not show: the realised price movement in 2021 is similar to other years (mean absolute log change 0.20-0.30 at 30 days against 0.23-0.35 elsewhere), and the forecast errors have no large persistent bias (mean signed log error within +-0.05). **I do not know why 2021 is a loss year and have not changed the model.**

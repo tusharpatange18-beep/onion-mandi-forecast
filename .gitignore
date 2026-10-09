@@ -21,3 +21,6 @@ results/*.parquet
 
 # row-level anomaly list (individual market-dates; derived data)
 results/anomalies.csv
+
+# the one parquet file allowed in git: synthetic test data for the CI container check
+!tests/fixtures/forecasts_fixture.parquet
