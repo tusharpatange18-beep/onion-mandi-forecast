@@ -150,3 +150,47 @@ forecast:
     days_since_last_quote: [gap_prev]
   # Analysis-only block bootstrap for the macro improvement (no model or selection is changed by it).
   bootstrap: {block_days: 30, resamples: 2000, seed: 42}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Phase 4. Methods are declared here before any interval or anomaly result is looked at; no switching afterwards.
+intervals:
+  # Primary method: rolling split-conformal, symmetric absolute-error quantile on the log scale with the finite-sample
+  # correction k = ceil((n + 1) * level), applied to the out-of-sample errors y_log - forecast of the headline LightGBM.
+  # Calibration set for a forecast made at origin t: errors of earlier forecasts (same market and horizon) whose target
+  # date is strictly before t, within the trailing calibration window, at least min_errors of them.
+  primary_method: conformal_abs
+  sensitivity_method: conformal_vol_scaled   # errors divided by the origin's volatility scale, then rescaled
+  comparator: naive                          # the same procedure applied to naive's errors
+  levels: [0.80, 0.95]
+  calibration_levels: [0.5, 0.6, 0.7, 0.8, 0.9, 0.95]   # for the calibration plot only
+  calibration_window_days: 365
+  min_errors: 100
+  vol_window_quotes: 30                      # scale = mean absolute log change over the last 30 observed quotes, known at the origin
+  seed_with_tuning_forecasts: true           # use the saved 2017-2019 tuning-run forecasts of the frozen LightGBM to fill the first calibration windows
+  fan_chart:
+    h: 30
+    markets: [Pune, Solapur]
+    periods:
+      - {name: "normal 2022", start: "2022-03-01", end: "2022-08-31"}
+      - {name: "export ban 2020-21 (E9-E10)", start: "2020-09-14", end: "2020-12-31"}
+      - {name: "export ban 2023-24 (E12-E13)", start: "2023-12-08", end: "2024-05-03"}
+
+anomalies:
+  # Detector 1 (retrospective: STL uses future data, so these are historical labels, not real-time alerts).
+  stl: {period: 52, robust: true, min_days_per_week: 3}
+  mad_threshold: 3.5          # flag if |resid - median| > mad_threshold * mad_scale * MAD
+  mad_scale: 1.4826
+  # Detector 2 (usable in real time): the realised quote falls outside the interval issued h days earlier.
+  surprise: {level: 0.95, horizons: [7, 30]}
+  arrivals: {window_days: 30, drop_z: -1.0}    # z-score of arrivals vs the trailing median; "drop" means z <= drop_z
+  # Event-period labels use only periods whose both end dates are high-confidence in docs/eda_findings.md.
+  high_confidence_periods: [export_ban_2019_20, covid_lockdown_2020, export_ban_2020_21, export_ban_2023_24]
+  # Synthetic test of the detectors (in memory only; never saved to data/). Spikes are multiplicative changes in price.
+  synthetic:
+    magnitudes: [0.25, 0.40, 0.60]
+    directions: [up, down]
+    durations_days: [1, 3]
+    runs: 20                  # independent random placements per market
+    seed: 7
+    min_separation_days: 45
+    window: ["2020-01-01", "2024-12-31"]
