@@ -238,6 +238,32 @@ def counts_table(tab: pd.DataFrame) -> pd.DataFrame:
     return c.reset_index().rename(columns={"up": "n_up", "down": "n_down"})[["market", "year", "detector", "n_flags", "n_up", "n_down"]]
 
 
+def rates_by_period(tab: pd.DataFrame, weeks: pd.DataFrame, panel: pd.DataFrame, intervals: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """Flags per 100 comparable dates, by event-period label (high-confidence periods only), for every detector.
+
+    The denominator of each detector is the set of dates it could have judged: observed weeks (STL), scored observed quotes
+    inside 2014-2024 (causal daily) and forecasts with an interval, by target date, for each surprise horizon. The unit
+    differs by detector (weeks or days), so rates are comparable across periods within a detector, not across detectors.
+    """
+    ac = cfg["anomalies"]
+    panel = panel.assign(market=panel["market_key"].map(F.short_name))
+    den = []
+    w = weeks[weeks["observed"]].reset_index()
+    den.append(pd.DataFrame({"detector": "stl_residual", "date": w["week_end"]}))
+    sc = pd.concat([causal_daily_detect(g.sort_values("date"), cfg).dropna(subset=["score"]) for _, g in panel.groupby("market")])
+    den.append(pd.DataFrame({"detector": "causal_daily", "date": sc["date"]}))
+    for h in ac["surprise"]["horizons"]:
+        g = intervals[(intervals["h"] == h)].dropna(subset=["lgbm_abs_lo_95"])
+        den.append(pd.DataFrame({"detector": f"forecast_surprise_h{h}", "date": g["target_date"]}))
+    den = pd.concat(den, ignore_index=True)
+    den["event_period"] = label_periods(den["date"], cfg)
+    d = den.groupby(["detector", "event_period"]).size().rename("comparable_dates")
+    f = tab.groupby(["detector", "event_period"]).size().rename("flags")
+    out = pd.concat([d, f], axis=1).fillna(0).reset_index()
+    out["flags_per_100_dates"] = 100 * out["flags"] / out["comparable_dates"]
+    return out
+
+
 # --------------------------------------------------------------------------- validation without labels: synthetic spikes
 def place_spikes(candidates: pd.DatetimeIndex, settings: list[dict[str, Any]], min_sep_days: int, rng: np.random.Generator) -> list[dict[str, Any]]:
     """Random start dates for each setting, at least `min_sep_days` apart; returns settings with a `start` date and the spike days."""
@@ -429,6 +455,7 @@ def main() -> None:
     tab.to_csv(res / "anomalies.csv", index=False)
     counts_table(tab).to_csv(res / "anomaly_counts.csv", index=False)
     arrivals_check(tab, weeks, panel, intervals, cfg).to_csv(res / "anomaly_arrivals_check.csv", index=False)
+    rates_by_period(tab, weeks, panel, intervals, cfg).to_csv(res / "anomaly_rates_by_period.csv", index=False)
     plot_stl(weeks, tab, res / "figures")
     frame = IV.build_frame(cfg)
     recall, fpr = synthetic_validation(cfg, panel, frame)

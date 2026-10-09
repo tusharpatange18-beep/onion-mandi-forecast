@@ -248,3 +248,22 @@ def test_synthetic_causal_places_spikes_on_the_same_dates_as_the_stl_test():
     a = AN.place_spikes(cand, settings, 45, rng1)
     b = AN.place_spikes(cand, settings, 45, rng2)
     assert [x["start"] for x in a] == [x["start"] for x in b]
+
+
+def test_rates_by_period_divides_flags_by_the_comparable_dates_of_each_period():
+    days = pd.date_range("2020-01-01", "2020-12-31")
+    rng = np.random.default_rng(0)
+    panel = pd.DataFrame({"market_key": "Maharashtra_Pune_Pune", "date": days, "modal_price": np.exp(7 + rng.normal(0, 0.05, len(days))), "arrivals_tonnes": 10.0})
+    mk = AN.F.short_name("Maharashtra_Pune_Pune")
+    det = AN.causal_daily_detect(panel, CFG)
+    flags = det[det["flag"]].assign(market=mk, detector="causal_daily")
+    tab = pd.DataFrame({"market": flags["market"], "date": flags["date"], "detector": flags["detector"]})
+    tab["event_period"] = AN.label_periods(tab["date"], CFG)
+    weeks = pd.DataFrame({"observed": [True] * 3}, index=pd.DatetimeIndex(["2020-04-05", "2020-04-12", "2020-06-07"], name="week_end"))
+    iv = pd.DataFrame({"h": [7], "target_date": [pd.Timestamp("2020-04-15")], "lgbm_abs_lo_95": [1.0]})
+    out = AN.rates_by_period(tab, weeks, panel, iv, CFG)
+    c = out[(out["detector"] == "causal_daily")]
+    assert c["comparable_dates"].sum() == det["score"].notna().sum()                    # every scored day belongs to exactly one label
+    assert np.isclose(c["flags"].sum(), len(flags)) and np.allclose(c["flags_per_100_dates"], 100 * c["flags"] / c["comparable_dates"])
+    s = out[out["detector"] == "stl_residual"].set_index("event_period")
+    assert s.loc["covid_lockdown_2020", "comparable_dates"] == 2 and s.loc["none", "comparable_dates"] == 1   # weeks ending 5 and 12 April are in the lockdown
