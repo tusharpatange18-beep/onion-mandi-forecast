@@ -1,5 +1,7 @@
 # Forecasting onion prices in five Maharashtra mandis
 
+[![ci](https://github.com/tusharpatange18-beep/onion-mandi-forecast/actions/workflows/ci.yml/badge.svg)](https://github.com/tusharpatange18-beep/onion-mandi-forecast/actions/workflows/ci.yml)
+
 Daily onion prices in Indian wholesale markets (mandis) swing by a factor of three or more within a year. This project forecasts the
 modal price 7 and 30 days ahead in five Maharashtra mandis, attaches calibrated prediction intervals, flags anomalous price moves, and
 serves the forecasts through an API and a dashboard. The evaluation is built to be honest first: every model is compared with simple
@@ -297,6 +299,7 @@ Requirements: Python 3.12 (the project was developed on Windows 11 with Python 3
 downloaded by hand from the DOI above to `data/raw/preprocessed_onion_2014_2024_prices_weather_events.parquet`.
 
 ```bash
+git clone https://github.com/tusharpatange18-beep/onion-mandi-forecast.git && cd onion-mandi-forecast
 python -m venv .venv && source .venv/bin/activate        # Windows: python -m venv %USERPROFILE%\.venvs\fada  then  ...\Scripts\activate
 python -m pip install -r requirements.txt
 
