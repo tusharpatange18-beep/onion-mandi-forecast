@@ -6,7 +6,7 @@ You are helping a B.Tech student build a portfolio-grade data science project. T
 
 Forecast the daily modal price of onions in 3 to 5 large Maharashtra mandis at 7-day and 30-day horizons, with prediction intervals, and flag anomalous price movements. Serve the forecasts through a small FastAPI service and a Streamlit dashboard.
 
-The headline result is the percentage improvement of the best model over a seasonal-naive baseline under honest rolling-origin backtesting. If no model beats the baseline at some horizon, report that plainly. Never invent, round up or cherry-pick numbers.
+The headline result is the percentage improvement in MAE of the best model over the **strongest baseline per market and horizon** (best of naive, mean of the last 3 observed quotes, and 365-day seasonal-naive) under honest rolling-origin backtesting. If no model beats the baselines at some horizon, report that plainly. Never invent, round up or cherry-pick numbers.
 
 ## Data
 
@@ -30,6 +30,8 @@ The headline result is the percentage improvement of the best model over a seaso
 - **Corrections:** six approved outlier prices are set to missing, never replaced: Sambhajinagar 2015-04-30, 2019-12-03, 2024-10-29; Kolhapur 2015-06-22, 2015-06-23, 2023-08-04. Originals are kept in `modal_price_raw` (also `min_price_raw`, `max_price_raw`), `was_corrected=True`. All other flagged points stay unchanged and flagged. The 0.3 outlier threshold was chosen after seeing 223 flags with the first rule and is not tuned further.
 - **Evaluation:** only target dates with an actual observed quote are scored. Missing share is reported both against 4,018 days and against each market's own span.
 - **Modelling evidence rule:** any EDA finding that drives a modelling choice (seasonal period, transform, differencing) must come from 2014-2019 only. 2020-2024 may be plotted for description.
+- **Notebook execution:** `requirements-dev.txt` pins jupyter, ipykernel and nbconvert, but executing notebooks is blocked here (Application Control blocks `Scripts\jupyter-nbconvert.exe`). `notebooks/02_eda.ipynb` therefore has embedded figures and no executed outputs; do not work around the policy.
+- **Sensitivity checks (Phase 3):** Vashi 2016-10-20 stays unchanged and flagged. Report (a) all "likely error" flagged points set to missing and (b) with and without `is_stale` dates.
 - **Environment:** Python 3.12.10 in a venv at `%USERPROFILE%\.venvs\fada`, outside OneDrive and Temp. Python 3.14 was abandoned: Windows Application Control blocked `statsmodels\tsa\statespace\_tools.cp314-win_amd64.pyd`, which breaks ETS and SARIMAX. A venv under Temp was also blocked. Smoke tests (a real fit of Prophet, LightGBM, ETS, SARIMAX, STL) pass on 3.12. Run tests with `.\scripts.ps1 test`.
 
 ## Repository layout
@@ -60,13 +62,26 @@ Create the layout, environment, `.gitignore`, config, and a `Makefile` or simple
 Notebook plus saved figures: trend, yearly and weekly seasonality, price vs arrivals, co-movement between markets, ADF and KPSS tests, ACF and PACF, structural breaks (for example export bans or policy changes). Write `docs/eda_findings.md` with the findings that will influence modelling.
 
 ### Phase 3: Baselines and models
-- Baselines: naive and seasonal-naive. These are the benchmark to beat.
-- Statistical: ETS and SARIMA (statsmodels), Prophet.
-- ML: LightGBM with lag features, rolling mean and std, calendar features, and arrivals.
-- Feature rule: every feature at forecast origin `t` uses only data up to `t`. Arrivals are only usable as lagged values unless forecasted. Write a test that proves no leakage (for example, shifting future values must not change features at `t`).
-- Backtesting: rolling-origin with an expanding window. Never use a random split. Never tune on the final test period; tune only on earlier folds.
-- Metrics: MAE, RMSE, MASE and sMAPE, per market and per horizon. Save to `results/backtest_metrics.csv`, plus a summary table showing percentage improvement over seasonal-naive.
-- Write `docs/model_report.md` covering what worked, what did not, and where models fail (festivals, shocks, long gaps).
+**Forecast task (defined in `configs/config.yaml`).** A forecast origin is a calendar day on which the market has an observed quote. The target is the quote at origin + h calendar days (h = 7 and 30), scored only if that quote exists. Models forecast the log change from the origin's quote to the target.
+
+**Baselines** (the benchmark to beat; the headline uses the best of the three per market and horizon):
+- (a) naive: the last observed quote (the origin's quote).
+- (b) the mean of the last 3 observed quotes (daily changes have negative autocorrelation, so a smoothed anchor may do better).
+- (c) seasonal-naive, 365-day period: the nearest observed quote within 3 days of the target date one year earlier. A 7-day seasonal-naive is effectively naive and is not used.
+
+**Models.** Statistical: ETS and SARIMA (statsmodels state-space versions, which handle missing days without filling them) and Prophet. ML: LightGBM, one model per horizon, target = log change from the origin's quote.
+
+**Features** (all computed on a calendar-day grid from data up to the origin; "lag k" means the last observed quote at or before origin - k): lagged log changes; deviation of the origin's quote from the mean of the last 3 observed quotes and from the 30-day mean; recent volatility; days since the previous observed quote; other markets' lagged prices and their average recent change; arrivals only lagged (strictly before the origin); calendar (month, week of year) and an expected-closure flag for the target date. No weather in version 1. A test proves no leakage (shifting future values must not change features at the origin).
+
+**Backtest.** Rolling origin, expanding window, never a random split. Hyperparameters and features are chosen only with folds inside 2014-2019 (tuning folds: origins in 2017, 2018, 2019, each trained on everything before the fold). The final evaluation uses an expanding window with origins from 2020-01-01 to 2024-12-31, with models retrained at a fixed interval (set in the config, justified in `docs/model_report.md`). Training rows only use origins whose target was already known at the retrain date. Nothing is changed after seeing 2020-2024 results, and every run is logged in `results/`.
+
+**Fairness.** Every model and baseline is scored on exactly the same set of (market, origin, horizon) triples. A triple that any model cannot forecast is dropped for all, and the number dropped is reported.
+
+**Metrics** per market and horizon on the rupee scale: MAE, RMSE, MASE (scaled by the in-sample naive error), sMAPE; plus MAE on the log scale. A Diebold-Mariano test (Harvey correction, HAC with h-1 lags) of the best model against the strongest baseline per market and horizon; forecasts overlap, so the test is approximate. The "best model" is the one that did best on the 2017-2019 tuning folds, fixed before the test period was run; the model that did best on the test period is reported separately and labelled optimistic.
+
+**Sensitivity.** Report (a) every "likely error" flagged point set to missing, and (b) with and without `is_stale` dates.
+
+**Outputs.** `results/backtest_metrics.csv`, a summary table of percentage improvement over the strongest baseline, runtime per model, and `docs/model_report.md` with what worked, what did not, error analysis by event period (export-ban vs normal periods) and by gap length since the last observation. Report real numbers, including where no model beats the baselines. Do not tune until a model wins.
 
 ### Phase 4: Intervals and anomalies
 - Prediction intervals via LightGBM quantile regression or split conformal prediction. Report empirical coverage versus nominal (for example 80% and 95%) per horizon.
@@ -79,7 +94,7 @@ Notebook plus saved figures: trend, yearly and weekly seasonality, price vs arri
 - Dockerfile and docker-compose for the API and dashboard.
 
 ### Phase 6: README and report
-README includes: problem, data source and its limits (including reporting lag), architecture, the results table generated from `results/` (never typed by hand), error analysis, limitations, how to reproduce, and what you would do next.
+README includes: problem, data source and its limits (including reporting lag), architecture, the results table generated from `results/` (never typed by hand), error analysis, limitations, how to reproduce, and what you would do next. The headline is the percentage improvement in MAE over the strongest baseline per market and horizon (naive, mean of the last 3 observed quotes, 365-day seasonal-naive), with the Diebold-Mariano result beside it, plus the five-market caveat (Lasalgaon is not in this dataset).
 
 ## Working rules
 

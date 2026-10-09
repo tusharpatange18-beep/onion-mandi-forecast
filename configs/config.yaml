@@ -96,3 +96,46 @@ eda:
        source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
     - {id: E13, date: "2024-05-04", kind: export, precision: day,     label: "Ban lifted, MEP USD 550/t (+40% duty reported)",
        source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
+
+forecast:
+  # A forecast origin is a calendar day with an observed quote at that market. The target is the quote at
+  # origin + h calendar days (h in backtest.horizons_days), scored only if that quote exists.
+  features:
+    lags_days: [1, 3, 7, 14, 28]          # log change from the last observed quote at or before origin - k
+    window_days: 30                       # window for the 30-day mean deviation and the volatility
+    cross_market_lags_days: [7, 28]       # other markets' average log change over k days
+    max_stale_days_other_market: 7        # ignore another market's latest quote if older than this
+  baselines:
+    mean_last_k: 3                        # baseline (b): mean of the last 3 observed quotes
+    seasonal_period_days: 365             # baseline (c): nearest observed quote within the tolerance of target - 365
+    seasonal_tolerance_days: 3
+  tuning_folds: [2017, 2018, 2019]        # origins in these years, expanding window; all inside 2014-2019
+  retrain_interval: month                 # models are refit on the first day of every month using only data before that day
+                                          # (a fit takes 0.1-2.5 s, so monthly is cheap; justified in docs/model_report.md)
+  models:                                 # candidates; hyperparameters are chosen on the 2017-2019 tuning folds only
+    ets:                                  # state-space exponential smoothing (accepts missing days)
+      - {name: local_level, trend: false, damped: false}
+      - {name: damped_trend, trend: true, damped: true}
+    sarima:
+      - {name: "011", order: [0, 1, 1], seasonal_order: [0, 0, 0, 0]}
+      - {name: "111", order: [1, 1, 1], seasonal_order: [0, 0, 0, 0]}
+      - {name: "111_s7", order: [1, 1, 1], seasonal_order: [1, 0, 0, 7]}
+    prophet:                              # weekly seasonality off (EDA: weekday price effects within +-1.8%), yearly on
+      - {name: cps0.05, changepoint_prior_scale: 0.05}
+      - {name: cps0.3, changepoint_prior_scale: 0.3}
+    lgbm:
+      learning_rate: 0.03
+      grid:
+        objective: [l1, huber]
+        num_leaves: [8, 16]
+        min_child_samples: [20, 60]
+        n_estimators: [150, 400]
+  selected_models_file: configs/selected_models.yaml   # written by the tuning step, committed before the final run
+  runs_dir: results/runs
+  # Error analysis by the period of the TARGET date (the date the price is realised). Periods do not overlap.
+  event_periods:
+    - {name: export_ban_2019_20, group: export_ban, start: "2019-09-29", end: "2020-03-14"}   # E5 to E6
+    - {name: covid_lockdown_2020, group: covid, start: "2020-03-25", end: "2020-05-31"}        # E7 to E8
+    - {name: export_ban_2020_21, group: export_ban, start: "2020-09-14", end: "2020-12-31"}   # E9 to E10
+    - {name: mep_oct_dec_2023, group: mep, start: "2023-10-28", end: "2023-12-07"}            # E11 to E12
+    - {name: export_ban_2023_24, group: export_ban, start: "2023-12-08", end: "2024-05-03"}   # E12 to E13
