@@ -148,3 +148,5 @@ forecast:
     other_market: [xm_chg_7, xm_chg_28, rel_level]
     mean_reversion: [dev3, dev30]
     days_since_last_quote: [gap_prev]
+  # Analysis-only block bootstrap for the macro improvement (no model or selection is changed by it).
+  bootstrap: {block_days: 30, resamples: 2000, seed: 42}
