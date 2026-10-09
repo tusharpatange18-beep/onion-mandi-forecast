@@ -12,3 +12,6 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 .env
+
+# EDA tables (derived data)
+results/eda/

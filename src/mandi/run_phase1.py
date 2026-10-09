@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def df_to_md(df: pd.DataFrame) -> str:
     """Render a DataFrame as a markdown table (no tabulate dependency)."""
-    cols = list(df.columns)
+    cols = [str(c) for c in df.columns]
     lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for row in df.itertuples(index=False):
         lines.append("| " + " | ".join(str(v) for v in row) + " |")

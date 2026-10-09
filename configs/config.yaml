@@ -60,3 +60,39 @@ backtest:
   first_test_date: "2020-01-01"
   last_test_date: "2024-12-31"
   horizons_days: [7, 30]
+
+eda:
+  train_end: "2019-12-31"      # findings that drive modelling choices may use data up to here only
+  min_days_per_week: 3         # weekly mean of observed days needs at least this many observed days
+  weekly_fill_weeks: 1         # fill weekly gaps of at most this many weeks (EDA tests only); longer gaps stay missing
+  figures_dir: results/figures
+  tables_dir: results/eda
+  # Known events. precision: day = date from the cited notification/order; month = only the month is cited
+  # (placed on the 1st); article = date of the news article, not of the notification. Student verifies all.
+  events:
+    - {id: E1,  date: "2014-08-21", kind: export, precision: day,     label: "MEP cut to USD 300/t",
+       source: "https://globaltradealert.org/intervention/19015-india-reduced-minimum-export-price-on-onions-august-2014"}
+    - {id: E2,  date: "2015-08-01", kind: export, precision: month,   label: "MEP raised to USD 700/t",
+       source: "https://www.eximguru.com/export-import-news/export-news/commerce-ministry-increases-onion-mep-97557.aspx"}
+    - {id: E3,  date: "2015-12-01", kind: export, precision: month,   label: "MEP scrapped",
+       source: "https://www.pressreader.com/india/the-financial-express/20160614/281925952293803"}
+    - {id: E4,  date: "2017-11-24", kind: export, precision: article, label: "MEP USD 850/t + letter of credit (to 31 Dec 2017)",
+       source: "https://www.pressreader.com/india/business-standard/20171124/282321090312436"}
+    - {id: E5,  date: "2019-09-29", kind: export, precision: day,     label: "Export ban (DGFT notif. 21/2015-2020)",
+       source: "https://eparlib.nic.in/bitstream/123456789/959497/1/AU339.pdf"}
+    - {id: E6,  date: "2020-03-15", kind: export, precision: day,     label: "Export ban lifted (DGFT notif. 49/2015-2020; announced 2 Mar)",
+       source: "https://english.madhyamam.com/business/2020/mar/3/onions-export-ban-be-lifted-march-15-centre"}
+    - {id: E7,  date: "2020-03-25", kind: covid,  precision: day,     label: "National lockdown starts (MHA order of 24 Mar)",
+       source: "https://www.scconline.com/blog/post/2020/03/24/breaking-corona-virus-covid-19-india-is-on-a-lockdown-for-21-days-from-midnight-check-the-list-of-things-restricted-and-allowed/"}
+    - {id: E8,  date: "2020-06-01", kind: covid,  precision: day,     label: "Unlock 1 begins (MHA guidelines of 30 May)",
+       source: "https://www.covidlawlab.org/wp-content/uploads/2020/11/2020-05-30-MHA-Guidelines-to-Fight-COVID-19.pdf"}
+    - {id: E9,  date: "2020-09-14", kind: export, precision: day,     label: "Export ban (all varieties)",
+       source: "https://old.thefinancialexpress.com.bd/trade/india-bans-onion-exports-1600095980"}
+    - {id: E10, date: "2021-01-01", kind: export, precision: day,     label: "Export ban lifted (notified 28 Dec 2020)",
+       source: "https://www.udayavani.com/english-news/govt-lifts-export-ban-on-all-varieties-of-onion-from-january-1"}
+    - {id: E11, date: "2023-10-28", kind: export, precision: day,     label: "MEP USD 800/t (to 31 Dec 2023)",
+       source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
+    - {id: E12, date: "2023-12-08", kind: export, precision: day,     label: "Export ban to 31 Mar 2024 (later extended)",
+       source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
+    - {id: E13, date: "2024-05-04", kind: export, precision: day,     label: "Ban lifted, MEP USD 550/t (+40% duty reported)",
+       source: "https://www.theweek.in/wire-updates/business/2024/05/04/del8-biz-ld-onion-exports.html"}
