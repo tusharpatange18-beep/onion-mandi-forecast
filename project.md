@@ -19,7 +19,7 @@ The headline result is the percentage improvement of the best model over a seaso
 
 ## Decisions (confirmed by the student)
 
-- **Markets:** five Maharashtra mandis: Pune, Chattrapati Sambhajinagar, Kolhapur, Solapur, Jalgaon. Nasik is excluded (214-day gap). Karad was considered but its median arrivals (15 t/day) are below Jalgaon's (50). Lasalgaon, Niphad, Pimpalgaon, Saykheda, Yeola and Chandwad are not in this dataset (case-insensitive search of market, district, market_key); the README must say so and present these as "five Maharashtra mandis".
+- **Markets:** five Maharashtra mandis: Solapur, Pune, Vashi New Mumbai, Kolhapur, Chattrapati Sambhajinagar (Jalgaon was replaced by Vashi after the Phase 1 review: its median arrivals are 50 t/day against 1,084 for Vashi; Vashi starts 2016-05-19). Nasik is excluded (214-day gap). Karad was considered but its median arrivals are only 15 t/day. Lasalgaon, Niphad, Pimpalgaon, Saykheda, Yeola and Chandwad are not in this dataset (case-insensitive search of market, district, market_key); the README must say so and present these as "five Maharashtra mandis".
 - **Variety:** per market, the single most frequent variety is the primary series. Only its rows are used. If it has no row on a day, that day is missing; never substitute another variety. Arrivals are deduplicated to one value per market-day (the file repeats it on every variety row). Document the chosen variety per market.
 - **Features:** use only raw columns plus calendar and festival columns. Ignore the file's lag, rolling, climate-anomaly, cum_rain, 5m and price_spike columns. Recompute all lags and rolling features on a calendar-day grid, so lag_7 means 7 days ago.
 - **Weather:** version 1 has no weather features. Later, test lagged rain and temperature as an ablation and report whether they help.
@@ -27,7 +27,10 @@ The headline result is the percentage improvement of the best model over a seaso
 - **Stale values:** count runs of 5 or more identical (min, max, modal) quotes in the chosen markets and propose a rule before changing anything.
 - **Outliers:** handle price extremes per market with a robust rule (rolling median and MAD). Log every change. Only the chosen markets matter.
 - **Backtest:** train on 2014-2019 and test forward across 2020-2024 (rolling-origin, expanding window), so the test period includes COVID and the export-ban periods.
-- **Environment:** the venv lives at `%USERPROFILE%\.venvs\fada`, not in the project (OneDrive) or in Temp. A venv under Temp was blocked by Windows Application Control. Run tests with `.\scripts.ps1 test`.
+- **Corrections:** six approved outlier prices are set to missing, never replaced: Sambhajinagar 2015-04-30, 2019-12-03, 2024-10-29; Kolhapur 2015-06-22, 2015-06-23, 2023-08-04. Originals are kept in `modal_price_raw` (also `min_price_raw`, `max_price_raw`), `was_corrected=True`. All other flagged points stay unchanged and flagged. The 0.3 outlier threshold was chosen after seeing 223 flags with the first rule and is not tuned further.
+- **Evaluation:** only target dates with an actual observed quote are scored. Missing share is reported both against 4,018 days and against each market's own span.
+- **Modelling evidence rule:** any EDA finding that drives a modelling choice (seasonal period, transform, differencing) must come from 2014-2019 only. 2020-2024 may be plotted for description.
+- **Environment:** Python 3.12.10 in a venv at `%USERPROFILE%\.venvs\fada`, outside OneDrive and Temp. Python 3.14 was abandoned: Windows Application Control blocked `statsmodels\tsa\statespace\_tools.cp314-win_amd64.pyd`, which breaks ETS and SARIMAX. A venv under Temp was also blocked. Smoke tests (a real fit of Prophet, LightGBM, ETS, SARIMAX, STL) pass on 3.12. Run tests with `.\scripts.ps1 test`.
 
 ## Repository layout
 

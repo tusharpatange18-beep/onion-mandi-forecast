@@ -1,4 +1,5 @@
-# Pinned to the versions verified together on Python 3.14 (Windows); `pip check` is clean.
+# Pinned versions, verified together on Python 3.12.10 (Windows); `pip check` is clean.
+# Python 3.14 is NOT used: Windows Application Control blocks statsmodels' statespace _tools.cp314 extension (ETS/SARIMAX).
 numpy==2.5.3
 pandas==3.0.5
 pyarrow==25.0.1
