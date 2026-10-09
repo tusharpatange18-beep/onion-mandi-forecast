@@ -1,0 +1,41 @@
+# Two services from one image. results/ and data/processed/ are mounted read-only: the data stays out of git and out of the image.
+# Generate the forecasts first (on the host):  python -m mandi.forecast   -> results/forecasts.parquet
+# The dataset ends 2024-12-31, so "latest" forecasts are as of the last data date, not live.
+services:
+  api:
+    build: .
+    image: mandi-onion:1.0.0
+    command: ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./results:/app/results:ro
+      - ./data/processed:/app/data/processed:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  dashboard:
+    image: mandi-onion:1.0.0
+    command: ["python", "-m", "streamlit", "run", "app/dashboard.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--browser.gatherUsageStats=false"]
+    environment:
+      MANDI_API_URL: "http://api:8000"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./results:/app/results:ro
+      - ./data/processed:/app/data/processed:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped

@@ -1,0 +1,16 @@
+# keep data, results, history and local environments out of the image
+.git
+.gitignore
+data
+results
+docs
+notebooks
+tests
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.pytest_cache
+*.parquet
+*.csv
+.env

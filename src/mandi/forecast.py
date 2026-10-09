@@ -126,9 +126,9 @@ def build_forecasts(cfg: dict[str, Any], as_of: pd.Timestamp | None = None) -> p
     f = preds["f_log"]
     out = pd.DataFrame({
         "market": preds["market"], "horizon": preds["h"], "origin_date": preds["origin"], "target_date": preds["target_date"],
-        "last_price": np.exp(preds["p0"]), "point": np.exp(f),
-        "lo80": np.exp(f - preds["q80"]), "hi80": np.exp(f + preds["q80"]), "lo95": np.exp(f - preds["q95"]), "hi95": np.exp(f + preds["q95"]),
-        "naive": np.exp(preds["p0"]), "n_calibration": preds["n_calibration"], "model_spec": preds["model_spec"],
+        "last_price": np.exp(preds["p0"]).round(2), "point": np.exp(f).round(2),          # rupees per quintal, to the paisa (removes exp/log float noise)
+        "lo80": np.exp(f - preds["q80"]).round(2), "hi80": np.exp(f + preds["q80"]).round(2), "lo95": np.exp(f - preds["q95"]).round(2), "hi95": np.exp(f + preds["q95"]).round(2),
+        "naive": np.exp(preds["p0"]).round(2), "n_calibration": preds["n_calibration"], "model_spec": preds["model_spec"],
         "trained_through": preds["h"].map(trained), "generated_at": now, "git_commit": git["commit"],
         "as_of": as_of, "data_through": last_quote, "is_latest": preds["origin"] == latest,
         "in_sample": (preds["target_date"] < as_of) & preds["y_log"].notna(),       # the row was in the training set

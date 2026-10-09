@@ -1,0 +1,17 @@
+# Pinned requirements of the serving image (API + dashboard, and `python -m mandi.forecast` if results/ is mounted writable).
+# Same versions as requirements.txt, verified on Python 3.12. No Prophet, scikit-learn, pytest or notebook tools.
+numpy==2.5.3
+pandas==3.0.5
+pyarrow==25.0.1
+PyYAML==6.0.3
+scipy==1.18.1
+statsmodels==0.15.0
+matplotlib==3.11.2
+lightgbm==4.7.0
+fastapi==0.143.0
+starlette==1.7.0
+pydantic==2.14.0
+uvicorn==0.54.0
+httpx==0.28.1
+streamlit==1.65.0
+plotly==7.1.0
