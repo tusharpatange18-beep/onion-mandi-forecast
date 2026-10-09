@@ -52,7 +52,7 @@ def specs_from_config(cfg: dict[str, Any]) -> list[Spec]:
     """All candidate model specs from forecast.models (LightGBM candidates are the grid product)."""
     out = []
     mc = cfg["forecast"]["models"]
-    for fam in ("ets", "sarima", "prophet"):
+    for fam in ("ets", "sarima", "prophet", "prophet_anchored"):
         for s in mc[fam]:
             p = {k: (tuple(v) if isinstance(v, list) else v) for k, v in s.items() if k != "name"}
             out.append(Spec(fam, s["name"], tuple(sorted(p.items()))))
@@ -110,9 +110,19 @@ def _task_state_space(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, 
     return spec.col, m, df, time.time() - t0, n_fits, n_bad
 
 
+def anchored_forecast(last_log_price: np.ndarray, pred_target: np.ndarray, pred_origin: np.ndarray) -> np.ndarray:
+    """prophet_anchored: the last observed log price plus the change Prophet predicts between the origin and the target.
+
+    Plain Prophet ignores recent prices; this keeps only its predicted *movement* (trend plus yearly shape) and anchors
+    it to the latest quote, the same way the naive baseline does.
+    """
+    return last_log_price + (pred_target - pred_origin)
+
+
 def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
-    """Prophet for one market across all refit blocks."""
+    """Prophet (plain, or anchored to the last quote when spec.family == 'prophet_anchored') for one market across all refit blocks."""
     spec, m, y, days, blocks, horizons = args
+    anchored = spec.family == "prophet_anchored"
     t0 = time.time()
     ys = pd.Series(y, index=days)
     first = ys.first_valid_index()
@@ -126,7 +136,7 @@ def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]
         origins = ys.loc[r:b_end].dropna().index
         if len(origins) == 0:
             continue
-        targets = sorted({o + pd.Timedelta(days=h) for o in origins for h in horizons})
+        targets = sorted({o + pd.Timedelta(days=h) for o in origins for h in horizons} | (set(origins) if anchored else set()))
         try:
             pred = pd.Series(M.prophet_forecast(ytr, pd.DatetimeIndex(targets), spec.p), index=targets)
             n_fits += 1
@@ -134,7 +144,10 @@ def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]
             logger.warning("%s market %d refit %s failed: %s", spec.col, m, r.date(), exc)
             continue
         for h in horizons:
-            rows.append(pd.DataFrame({"market_idx": m, "origin": origins, "h": h, "f": pred.reindex(origins + pd.Timedelta(days=h)).to_numpy()}))
+            f = pred.reindex(origins + pd.Timedelta(days=h)).to_numpy()
+            if anchored:
+                f = anchored_forecast(ys.loc[origins].to_numpy(), f, pred.reindex(origins).to_numpy())
+            rows.append(pd.DataFrame({"market_idx": m, "origin": origins, "h": h, "f": f}))
     df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["market_idx", "origin", "h", "f"])
     return spec.col, m, df, time.time() - t0, n_fits, 0
 
@@ -180,7 +193,7 @@ def run_backtest(arrays: F.Arrays, tables: dict[int, pd.DataFrame], specs: list[
     for s in specs:
         if s.family in ("ets", "sarima"):
             jobs += [(_task_state_space, (s, m, arrays.logp[m], arrays.days, blocks, horizons)) for m in range(len(arrays.markets))]
-        elif s.family == "prophet":
+        elif s.family in ("prophet", "prophet_anchored"):
             jobs += [(_task_prophet, (s, m, arrays.logp[m], arrays.days, blocks, horizons)) for m in range(len(arrays.markets))]
         else:
             jobs += [(_task_lgbm, (s, h, tables[h], blocks, seed)) for h in horizons]

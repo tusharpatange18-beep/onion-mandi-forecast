@@ -1,7 +1,6 @@
 # Data: never committed (large, derived from third-party source)
 data/
 results/*.parquet
-results/*.csv
 *.parquet
 
 # Environments and caches
@@ -18,5 +17,4 @@ results/eda/
 
 # Phase 3 run outputs (derived data)
 results/runs/
-results/tuning/
 results/*.parquet

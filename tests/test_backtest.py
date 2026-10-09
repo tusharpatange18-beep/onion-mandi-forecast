@@ -146,3 +146,40 @@ def test_coverage_guard_aborts_when_a_model_cannot_forecast_a_whole_market():
     t.loc[t.index[:3], "m1"] = np.nan   # 3 of 50 = 6% in market A -> still caught
     with pytest.raises(RuntimeError):
         B.check_forecast_coverage(t, ["m1"])
+
+
+def test_anchored_forecast_is_last_price_plus_predicted_change():
+    out = B.anchored_forecast(np.array([7.0, 6.0]), np.array([7.5, 5.0]), np.array([7.2, 5.5]))
+    np.testing.assert_allclose(out, [7.3, 5.5])
+
+
+def test_prophet_anchored_task_uses_the_origin_price_and_predicted_movement(monkeypatch):
+    """With a stub whose 'Prophet' is a straight line of slope 0.01 per day, the anchored forecast must be
+    last observed log price + 0.01 * h, independent of the line's level, while plain Prophet returns the line itself."""
+    def stub(y_train, target_dates, spec, seed=0):
+        return 100.0 + 0.01 * (pd.DatetimeIndex(target_dates) - pd.Timestamp("2019-01-01")).days.to_numpy()
+
+    monkeypatch.setattr(M, "prophet_forecast", stub)
+    days = pd.date_range("2018-01-01", "2020-03-31")
+    rng = np.random.default_rng(0)
+    y = 7 + np.cumsum(rng.normal(0, 0.02, len(days)))
+    ys = pd.Series(y, index=days)
+    blocks = B._blocks(B.refit_schedule("2020-01-01", "2020-03-31"), pd.Timestamp("2020-03-31"))
+    for fam in ("prophet_anchored", "prophet"):
+        col, _, df, _, n_fits, _ = B._task_prophet((B.Spec(fam, "x", (("changepoint_prior_scale", 0.05),)), 0, y, days, blocks, [7, 30]))
+        assert n_fits == 3 and len(df) > 100
+        for h in (7, 30):
+            d = df[df["h"] == h]
+            if fam == "prophet_anchored":
+                expected = ys.loc[d["origin"]].to_numpy() + 0.01 * h
+            else:
+                expected = 100.0 + 0.01 * ((d["origin"] + pd.Timedelta(days=h)) - pd.Timestamp("2019-01-01")).dt.days.to_numpy()
+            np.testing.assert_allclose(d["f"].to_numpy(), expected, atol=1e-9)
+
+
+def test_specs_include_the_declared_prophet_anchored_candidates():
+    from mandi.config import load_config
+
+    cols = [s.col for s in B.specs_from_config(load_config())]
+    assert "prophet_anchored|cps0.05" in cols and "prophet_anchored|cps0.3" in cols and "prophet|cps0.3" in cols
+    assert len(cols) == 25

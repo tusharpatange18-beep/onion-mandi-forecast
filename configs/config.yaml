@@ -123,6 +123,9 @@ forecast:
     prophet:                              # weekly seasonality off (EDA: weekday price effects within +-1.8%), yearly on
       - {name: cps0.05, changepoint_prior_scale: 0.05}
       - {name: cps0.3, changepoint_prior_scale: 0.3}
+    prophet_anchored:                     # declared before freezing: last observed log price + Prophet's predicted change from origin to target
+      - {name: cps0.05, changepoint_prior_scale: 0.05}
+      - {name: cps0.3, changepoint_prior_scale: 0.3}
     lgbm:
       learning_rate: 0.03
       grid:

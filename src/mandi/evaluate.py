@@ -9,7 +9,7 @@ import pandas as pd
 from mandi import metrics as MET
 from mandi.backtest import BASELINES, Spec
 
-FAMILIES = ["ets", "sarima", "prophet", "lgbm"]
+FAMILIES = ["ets", "sarima", "prophet", "prophet_anchored", "lgbm"]  # prophet = off the shelf; prophet_anchored = declared variant
 
 
 def family_of(col: str) -> str:
