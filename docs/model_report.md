@@ -489,7 +489,7 @@ Per market:
 
 ### 5.4 Where does the mean gain come from? (analysis only)
 
-Saving on each forecast = |strongest-baseline error| - |headline error| in rupees. The table shows how much of the total saving comes from the 10% of forecasts with the largest baseline errors (the large moves), the share of forecasts on which the model is better, and the typical (median) saving. A mean gain that comes from the large moves with a zero median saving means the model is tied on ordinary days.
+Saving on each forecast = |strongest-baseline error| - |headline error| in rupees. The table shows how much of the total saving comes from the 10% of forecasts with the largest baseline errors (the large moves), the share of forecasts on which the model is better, and the typical (median) saving. A mean gain that comes from the large moves with a zero median saving means the model is tied on ordinary days. In the ALL row the share is pooled over markets (sum of the savings in each market's top 10% divided by the sum of all savings); a share above 100% means the other 90% of forecasts have a net negative saving.
 
 | market | h | n | mean_saving_rs | median_saving_rs | share_of_forecasts_model_better_pct | share_of_total_saving_from_top_10pct_largest_baseline_errors_pct | mean_saving_rs_excluding_top | mean_saving_rs_top |
 |---|---|---|---|---|---|---|---|---|
@@ -503,8 +503,8 @@ Saving on each forecast = |strongest-baseline error| - |headline error| in rupee
 | Solapur | 30 | 773.0 | 25.78 | 58.95 | 62.6 | 46.6 | 15.3 | 119.12 |
 | Vashi | 7 | 1113.0 | -4.03 | -3.45 | 48.0 | nan | -11.3 | 60.94 |
 | Vashi | 30 | 907.0 | 43.06 | 54.2 | 60.3 | 73.9 | 12.5 | 317.05 |
-| ALL (mean of markets) | 7 | 1122.8 | 6.12 | -0.02 | 49.6 | 124.7 | -2.03 | 79.1 |
-| ALL (mean of markets) | 30 | 910.4 | 35.69 | 51.49 | 60.9 | 62.7 | 14.61 | 224.14 |
+| ALL (mean of markets) | 7 | 1122.8 | 6.12 | -0.02 | 49.6 | 127.5 | -2.03 | 79.1 |
+| ALL (mean of markets) | 30 | 910.4 | 35.69 | 51.49 | 60.9 | 63.4 | 14.61 | 224.14 |
 
 
 ## 6. Error analysis
