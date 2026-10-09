@@ -8,7 +8,7 @@ from mandi.config import ROOT, load_config
 
 CFG = load_config()
 FAIR = ROOT / "results" / "fair_forecasts.parquet"
-needs_results = pytest.mark.skipif(not (FAIR.exists() and (ROOT / CFG["paths"]["panel"]).exists()), reason="panel / backtest results not built")
+needs_results = pytest.mark.local_data("panel", "fair", "tuning_run")
 
 # Serving and the backtest call the same training function on the same rows with the same seed and thread count, so the log forecasts
 # should agree to floating-point precision. The tolerance is stated here: 1e-6 in log space (about 0.0001% in rupees).

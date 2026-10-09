@@ -86,35 +86,42 @@ def panel():
     return pd.read_parquet(PANEL_PATH)
 
 
+@pytest.mark.local_data("panel")
 def test_panel_markets_match_config(panel):
     assert set(panel["market_key"]) == set(CFG["markets"])
 
 
+@pytest.mark.local_data("panel")
 def test_no_duplicate_market_date(panel):
     assert not panel.duplicated(["market_key", "date"]).any()
 
 
+@pytest.mark.local_data("panel")
 def test_dates_sorted_and_daily_within_each_market(panel):
     for _, g in panel.groupby("market_key"):
         assert g["date"].is_monotonic_increasing
         assert (g["date"].diff().dropna() == pd.Timedelta(days=1)).all()
 
 
+@pytest.mark.local_data("panel")
 def test_observed_prices_positive_and_ordered(panel):
     obs = panel[~panel["was_missing"]]
     assert (obs[["modal_price", "min_price", "max_price"]] > 0).all().all()
     assert not obs["is_order_violation"].any()
 
 
+@pytest.mark.local_data("panel")
 def test_was_missing_matches_missing_target(panel):
     assert (panel["was_missing"] == panel["modal_price"].isna()).all()
 
 
+@pytest.mark.local_data("panel")
 def test_targets_are_never_filled(panel):
     # a day that was missing must have a missing target, whatever the *_ffill columns say
     assert panel.loc[panel["was_missing"], "modal_price"].isna().all()
 
 
+@pytest.mark.local_data("panel")
 def test_no_fill_beyond_gap_limit(panel):
     for _, g in panel.groupby("market_key"):
         run = (g["was_missing"] != g["was_missing"].shift()).cumsum()
@@ -127,6 +134,7 @@ def test_no_fill_beyond_gap_limit(panel):
         assert g.loc[short_gap, "modal_price_ffill"].notna().all()
 
 
+@pytest.mark.local_data("panel")
 def test_filled_values_equal_last_observation(panel):
     for _, g in panel.groupby("market_key"):
         last_obs = g["modal_price"].ffill()
@@ -140,6 +148,7 @@ def _raw_state_rows():
                            filters=[("state", "==", CFG["data"]["state"])])
 
 
+@pytest.mark.local_data("panel", "raw")
 def test_raw_columns_equal_the_source_file_and_are_never_modified(panel):
     raw = _raw_state_rows()
     obs = panel.dropna(subset=["modal_price_raw"])
@@ -151,6 +160,7 @@ def test_raw_columns_equal_the_source_file_and_are_never_modified(panel):
     assert panel["modal_price_raw"].notna().sum() == len(obs)
 
 
+@pytest.mark.local_data("panel")
 def test_only_approved_corrections_changed_and_only_to_missing(panel):
     corrected = panel[panel["was_corrected"]]
     approved = {(c["market_key"], pd.Timestamp(c["date"])) for c in CFG["corrections"]}
@@ -162,6 +172,7 @@ def test_only_approved_corrections_changed_and_only_to_missing(panel):
     assert same.all()
 
 
+@pytest.mark.local_data("panel")
 def test_corrected_days_are_not_in_the_filled_target(panel):
     corrected = panel[panel["was_corrected"]]
     assert corrected["modal_price"].isna().all()  # target stays missing even though a *_ffill value may exist

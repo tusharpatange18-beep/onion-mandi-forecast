@@ -52,6 +52,7 @@ def test_no_leakage_changing_the_future_does_not_change_features_at_the_origin(h
     assert not np.allclose(a["y_log"].fillna(0), b["y_log"].fillna(0))
 
 
+@pytest.mark.local_data("panel")
 def test_no_leakage_on_real_panel():
     path = ROOT / CFG["paths"]["panel"]
     if not path.exists():

@@ -1,3 +1,5 @@
+import pytest
+
 from mandi.config import ROOT, load_config
 
 
@@ -8,5 +10,6 @@ def test_config_loads_and_has_required_sections():
     assert cfg["cleaning"]["max_ffill_gap_days"] == 3
 
 
+@pytest.mark.local_data("raw")
 def test_raw_data_is_where_config_says():
     assert (ROOT / load_config()["paths"]["raw_file"]).exists()

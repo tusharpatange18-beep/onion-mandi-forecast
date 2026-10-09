@@ -197,7 +197,7 @@ def test_history_returns_the_rows_in_date_order_with_in_sample_flags_and_nulls(e
 real = ROOT / CFG["serving"]["forecasts_file"]
 
 
-@pytest.mark.skipif(not real.exists(), reason="results/forecasts.parquet not generated")
+@pytest.mark.local_data("forecasts")
 def test_real_forecast_file_serves_every_market_and_horizon():
     c = TestClient(create_app())
     for m in MARKETS:

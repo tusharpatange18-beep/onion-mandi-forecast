@@ -32,6 +32,7 @@ def _windows():
             "final": (CFG["backtest"]["first_test_date"], CFG["backtest"]["last_test_date"])}
 
 
+@pytest.mark.local_data("panel")
 @pytest.mark.parametrize("window_name", ["tuning", "final"])
 @pytest.mark.parametrize("h", [7, 30])
 def test_every_lightgbm_training_row_has_a_target_before_the_refit_date(monkeypatch, tables, window_name, h):

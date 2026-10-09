@@ -172,7 +172,7 @@ def test_anomalies_tab_lists_flags_from_the_results_file(world):
 REAL = ROOT / CFG["serving"]["forecasts_file"]
 
 
-@pytest.mark.skipif(not (REAL.exists() and (ROOT / CFG["serving"]["panel_file"]).exists() and (ROOT / "results" / "summary_macro.csv").exists()), reason="real results not generated")
+@pytest.mark.local_data("forecasts", "panel", "interval_forecasts")
 def test_page_renders_against_the_real_results_and_forecasts(monkeypatch):
     client = TestClient(create_app())
     monkeypatch.setattr(D, "_http_get", lambda path, params=None: client.get(path, params=params))

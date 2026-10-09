@@ -85,6 +85,7 @@ def test_stationarity_table_flags_random_walk_and_white_noise():
     assert diff.loc["walk", "ADF_p"] < 0.05
 
 
+@pytest.mark.local_data("panel")
 def test_modelling_evidence_slice_ends_before_test_period():
     panel_path = ROOT / CFG["paths"]["panel"]
     if not panel_path.exists():
