@@ -78,6 +78,7 @@ def cmd_tune(cfg: dict[str, Any], workers: int) -> None:
            "best_model_by_validation": [{"market": m, "h": int(h), "model": mod} for (m, h), mod in sorted(best_val.items())]}
     _selected_path(cfg).write_text("# Written by `python -m mandi.run_phase3 tune`. Commit this file BEFORE running `final`.\n" + yaml.safe_dump(sel, sort_keys=False), encoding="utf-8")
     logger.info("tuning done: %d of %d triples kept; selection written to %s", len(kept), len(tab), _selected_path(cfg))
+    print("kept triples per market/horizon:\n", kept.groupby(["market", "h"]).size().unstack().to_string())
     print(scores[scores["family"].isin(E.FAMILIES)].sort_values(["h", "family", "score_log_MAE"]).round(4).to_string(index=False))
     print(scores[scores["family"] == "base_naive"].round(4).to_string(index=False))
 

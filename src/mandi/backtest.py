@@ -78,14 +78,14 @@ def _blocks(refits: list[pd.Timestamp], end: pd.Timestamp) -> list[tuple[pd.Time
 
 
 # --------------------------------------------------------------------------- worker tasks (top level so they can be pickled)
-def _task_state_space(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
+def _task_state_space(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
     """Statistical state-space model for one market across all refit blocks."""
     spec, m, y, days, blocks, horizons = args
     t0 = time.time()
     kind = spec.family
     ys = pd.Series(y, index=days)
     first = ys.first_valid_index()
-    rows, params, n_fits = [], None, 0
+    rows, params, n_fits, n_bad = [], None, 0, 0
     for r, b_end in blocks:
         if first is None or r <= first:
             continue
@@ -93,8 +93,9 @@ def _task_state_space(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
         if ytr.notna().sum() < MIN_TRAIN_OBS:
             continue
         try:
-            params = M.fit_state_space(kind, spec.p, ytr, start_params=params)
+            params, converged = M.fit_state_space(kind, spec.p, ytr, start_params=params, return_info=True)
             n_fits += 1
+            n_bad += int(not converged)
             yrun = ys.loc[first:b_end]
             fc = M.state_space_forecasts(kind, spec.p, yrun, params, horizons)
         except Exception as exc:  # a failed fit leaves the forecasts missing; the triple is then dropped for all models
@@ -106,10 +107,10 @@ def _task_state_space(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
             idx = yrun.index[pos]
             rows.append(pd.DataFrame({"market_idx": m, "origin": idx, "h": h, "f": fc[h][pos]}))
     df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["market_idx", "origin", "h", "f"])
-    return spec.col, m, df, time.time() - t0, n_fits
+    return spec.col, m, df, time.time() - t0, n_fits, n_bad
 
 
-def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
+def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
     """Prophet for one market across all refit blocks."""
     spec, m, y, days, blocks, horizons = args
     t0 = time.time()
@@ -135,10 +136,10 @@ def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
         for h in horizons:
             rows.append(pd.DataFrame({"market_idx": m, "origin": origins, "h": h, "f": pred.reindex(origins + pd.Timedelta(days=h)).to_numpy()}))
     df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["market_idx", "origin", "h", "f"])
-    return spec.col, m, df, time.time() - t0, n_fits
+    return spec.col, m, df, time.time() - t0, n_fits, 0
 
 
-def _task_lgbm(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
+def _task_lgbm(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
     """Pooled LightGBM for one horizon across all refit blocks."""
     spec, h, table, blocks, seed = args
     t0 = time.time()
@@ -154,7 +155,7 @@ def _task_lgbm(args: tuple) -> tuple[str, int, pd.DataFrame, float, int]:
         rows.append(pd.DataFrame({"market_idx": test["market_idx"].to_numpy(), "origin": test["origin"].to_numpy(), "h": h,
                                   "f": test["p0"].to_numpy() + pred}))
     df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["market_idx", "origin", "h", "f"])
-    return spec.col, h, df, time.time() - t0, n_fits
+    return spec.col, h, df, time.time() - t0, n_fits, 0
 
 
 # --------------------------------------------------------------------------- orchestration
@@ -195,17 +196,40 @@ def run_backtest(arrays: F.Arrays, tables: dict[int, pd.DataFrame], specs: list[
                 "base_naive", "base_mean3", "base_seasonal"]].copy()
     timings: dict[str, Any] = {"wall_seconds": round(wall, 1), "per_model": {}}
     by_col: dict[str, list[pd.DataFrame]] = {}
-    for col, _, df, secs, n_fits in results:
+    for col, _, df, secs, n_fits, n_bad in results:
         by_col.setdefault(col, []).append(df)
-        d = timings["per_model"].setdefault(col, {"cpu_seconds": 0.0, "fits": 0})
+        d = timings["per_model"].setdefault(col, {"cpu_seconds": 0.0, "fits": 0, "not_converged": 0})
         d["cpu_seconds"] = round(d["cpu_seconds"] + secs, 1)
         d["fits"] += n_fits
+        d["not_converged"] += n_bad
     for col, dfs in by_col.items():
         f = pd.concat(dfs, ignore_index=True).rename(columns={"f": col})
         out = out.merge(f, on=["market_idx", "origin", "h"], how="left")
     for col, d in timings["per_model"].items():
         d["cpu_seconds_per_fit"] = round(d["cpu_seconds"] / max(d["fits"], 1), 2)
+    check_forecast_coverage(out, [c for c in by_col])
     return out, timings
+
+
+def check_forecast_coverage(tab: pd.DataFrame, model_cols: list[str], max_missing: float = 0.02, seasonal_max_missing: float = 0.5) -> None:
+    """Abort if any model silently failed to forecast (part of) a market.
+
+    The fairness filter drops a triple for every model when one model cannot forecast it, so one broken candidate can
+    erase a whole market without any error. This guard turns that into a hard failure: no model column may be missing
+    more than `max_missing` of the triples in any (market, horizon); the 365-day baseline, which is legitimately missing
+    when no quote exists a year earlier, is allowed `seasonal_max_missing`.
+    """
+    problems = []
+    for (m, h), g in tab.groupby(["market", "h"]):
+        for c in model_cols:
+            share = g[c].isna().mean()
+            if share > max_missing:
+                problems.append(f"{c} missing {share:.1%} of {len(g)} triples for {m} h={h}")
+        share = g["base_seasonal"].isna().mean()
+        if share > seasonal_max_missing:
+            problems.append(f"base_seasonal missing {share:.1%} for {m} h={h}")
+    if problems:
+        raise RuntimeError("forecast coverage guard failed:\n  " + "\n  ".join(problems[:40]))
 
 
 def fairness_filter(tab: pd.DataFrame, columns: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:

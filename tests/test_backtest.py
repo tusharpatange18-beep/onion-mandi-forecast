@@ -103,3 +103,46 @@ def test_diebold_mariano_is_not_significant_for_equally_good_forecasts():
 
 def test_naive_scale_is_mean_absolute_rupee_change():
     assert np.isclose(MET.naive_scale(np.log([110.0, 90.0]), np.log([100.0, 100.0])), 10.0)
+
+
+def test_damped_trend_ets_fit_is_finite_when_a_long_gap_follows_the_first_quote():
+    """Regression: Kolhapur has a 71-day gap right after its first quote; the library's default start values gave a NaN
+    initial trend, so every forecast was NaN and the fairness filter silently erased the whole market."""
+    rng = np.random.default_rng(0)
+    idx = pd.date_range("2014-06-18", periods=400)
+    y = pd.Series(7 + np.cumsum(rng.normal(0, 0.04, 400)), index=idx)
+    y.iloc[1:72] = np.nan
+    spec = {"trend": True, "damped": True}
+    params = M.fit_state_space("ets", spec, y.iloc[:300])
+    assert np.all(np.isfinite(params))
+    fc = M.state_space_forecasts("ets", spec, y, params, [7, 30])
+    assert np.isfinite(fc[7][-50:]).all() and np.isfinite(fc[30][-50:]).all()
+
+
+def test_fit_state_space_refuses_non_finite_parameters(monkeypatch):
+    class Bad:
+        params = np.array([0.1, np.nan])
+        mle_retvals = {"converged": True}
+
+    class FakeModel:
+        param_names = ["smoothing_level", "initial_level"]
+
+        def fit(self, **kw):
+            return Bad()
+
+    monkeypatch.setattr(M, "_build", lambda kind, spec, endog: FakeModel())
+    y = pd.Series(np.arange(10.0), index=pd.date_range("2020-01-01", periods=10))
+    with pytest.raises(ValueError, match="non-finite"):
+        M.fit_state_space("ets", {"trend": False, "damped": False}, y)
+
+
+def test_coverage_guard_aborts_when_a_model_cannot_forecast_a_whole_market():
+    t = pd.DataFrame({"market": ["A"] * 50 + ["B"] * 50, "h": 7, "base_seasonal": 1.0, "m1": 1.0})
+    t.loc[t["market"] == "B", "m1"] = np.nan  # model m1 silently fails for market B
+    with pytest.raises(RuntimeError, match="m1 missing 100.0% of 50 triples for B"):
+        B.check_forecast_coverage(t, ["m1"])
+    t["m1"] = 1.0
+    B.check_forecast_coverage(t, ["m1"])  # healthy table passes
+    t.loc[t.index[:3], "m1"] = np.nan   # 3 of 50 = 6% in market A -> still caught
+    with pytest.raises(RuntimeError):
+        B.check_forecast_coverage(t, ["m1"])

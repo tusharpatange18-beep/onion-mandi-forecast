@@ -43,14 +43,34 @@ def h_step_forecasts(res: Any, horizons: list[int]) -> dict[int, np.ndarray]:
     return {h: (Z @ np.linalg.matrix_power(T, h) @ a).ravel() for h in horizons}
 
 
+def _start_params(kind: str, spec: dict[str, Any], y_train: pd.Series) -> np.ndarray | None:
+    """Explicit start values for ETS. The library's own heuristic returns NaN for the initial trend when one of the first
+    two observations is missing (Kolhapur has a 71-day gap right after its first quote), which silently ruins the fit."""
+    if kind != "ets":
+        return None
+    names = _build(kind, spec, y_train).param_names
+    defaults = {"smoothing_level": 0.3, "smoothing_trend": 0.05, "damping_trend": 0.95,
+                "initial_level": float(y_train.dropna().iloc[0]), "initial_trend": 0.0}
+    return np.array([defaults[n] for n in names])
+
+
 def fit_state_space(kind: str, spec: dict[str, Any], y_train: pd.Series, start_params: np.ndarray | None = None,
-                    maxiter: int = 100) -> np.ndarray:
-    """Estimate parameters on `y_train` (log price on a daily index, NaN on missing days)."""
+                    maxiter: int = 100, return_info: bool = False):
+    """Estimate parameters on `y_train` (log price on a daily index, NaN on missing days).
+
+    Raises if any estimated parameter is not finite, so a broken fit can never pass silently. With
+    `return_info=True` returns (params, converged).
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         mod = _build(kind, spec, y_train)
-        res = mod.fit(start_params=start_params, disp=False, maxiter=maxiter)
-    return np.asarray(res.params)
+        sp = start_params if start_params is not None and np.all(np.isfinite(start_params)) else _start_params(kind, spec, y_train)
+        res = mod.fit(start_params=sp, disp=False, maxiter=maxiter)
+    params = np.asarray(res.params)
+    if not np.all(np.isfinite(params)):
+        raise ValueError(f"non-finite parameters from {kind} {spec}: {params}")
+    converged = bool(res.mle_retvals.get("converged", True)) if getattr(res, "mle_retvals", None) else True
+    return (params, converged) if return_info else params
 
 
 def state_space_forecasts(kind: str, spec: dict[str, Any], y_run: pd.Series, params: np.ndarray, horizons: list[int]) -> dict[int, np.ndarray]:
