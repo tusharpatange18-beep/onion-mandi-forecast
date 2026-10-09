@@ -9,6 +9,8 @@ sarima|111,0,7157,150
 sarima|111_s7,0,7157,150
 prophet|cps0.05,0,7157,150
 prophet|cps0.3,0,7157,150
+prophet_anchored|cps0.05,0,7157,150
+prophet_anchored|cps0.3,0,7157,150
 lgbm|l1_nl8_mc20_n150,0,7157,150
 lgbm|l1_nl8_mc20_n400,0,7157,150
 lgbm|l1_nl8_mc60_n150,0,7157,150
