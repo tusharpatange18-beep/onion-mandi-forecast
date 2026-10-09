@@ -17,22 +17,33 @@ data:
   keep_columns: [date, state, district, market, market_key, variety, arrivals_tonnes,
                  min_price_rs_qtl, max_price_rs_qtl, modal_price_rs_qtl]
   calendar_columns: [is_festival, festival_name, crop_season_onion]
+  price_columns: [min_price_rs_qtl, max_price_rs_qtl, modal_price_rs_qtl]
 
-# Candidate markets, pending confirmation. primary_variety = most frequent variety in that market.
+# Chosen markets (provisional). Changing the market list is a config edit only.
+# The primary variety (most frequent variety in the market) is derived from the data, not set here.
 markets:
-  - {market_key: Maharashtra_Pune_Pune, primary_variety: Local}
-  - {market_key: Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar, primary_variety: Other}
-  - {market_key: Maharashtra_Kolhapur_Kolhapur, primary_variety: Other}
-  - {market_key: Maharashtra_Sholapur_Solapur, primary_variety: Red}
-  - {market_key: Maharashtra_Jalgaon_Jalgaon, primary_variety: Red}
+  - Maharashtra_Pune_Pune
+  - Maharashtra_Chattrapati Sambhajinagar_Chattrapati Sambhajinagar
+  - Maharashtra_Kolhapur_Kolhapur
+  - Maharashtra_Sholapur_Solapur
+  - Maharashtra_Jalgaon_Jalgaon
+
+# Markets always shown in the ranking table, even if they miss the thresholds.
+ranking:
+  min_observed_days: 2000
+  max_gap_days: 90
+  always_show: [Maharashtra_Mumbai_Vashi New Mumbai, Maharashtra_Nagpur_Nagpur]
 
 cleaning:
-  max_ffill_gap_days: 3        # forward-fill only to build features, never for the target
-  stale_run_min_length: 5      # runs of identical (min, max, modal); rule to be proposed
-  outlier:
-    method: rolling_median_mad
-    window_days: 30
-    mad_threshold: 6.0
+  max_ffill_gap_days: 3        # fill only gaps of at most this many days, only for features, never the target
+  stale_run_min_length: 5      # runs of identical (min, max, modal) quotes on consecutive observed days -> is_stale
+  outlier:                     # flag only, never auto-correct
+    window_days: 31            # centred calendar-day window (15 days either side)
+    min_obs: 10                # need at least this many observed days in the window, otherwise no flag
+    mad_threshold: 6.0         # flag if |log(price/rolling median)| > threshold * 1.4826 * MAD
+    mad_floor_log: 0.02        # MAD floor (in log units) so quiet periods don't flag tiny moves
+    min_abs_log_dev: 0.3       # AND the point must be at least this far from the rolling median (0.3 = about +35% / -26%); quotes move in Rs 50-100 steps, so MAD is often 0 and tiny steps would otherwise be flagged
+    peer_range_tolerance: 0.25 # review guess: flagged price inside [min, max] of the other markets' same-day prices, widened by this share -> likely real
 
 backtest:
   train_start: "2014-01-01"
