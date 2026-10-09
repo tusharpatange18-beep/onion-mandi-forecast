@@ -69,21 +69,23 @@ def calibration_frame(cfg: dict[str, Any], fair: pd.DataFrame, tuning: pd.DataFr
 
 
 # --------------------------------------------------------------------------- conformal core
-def conformal_halfwidths(origin: np.ndarray, target: np.ndarray, score: np.ndarray, levels: list[float],
-                         window_days: int, min_errors: int) -> tuple[dict[float, np.ndarray], np.ndarray]:
-    """Rolling split-conformal quantiles for one (market, horizon) series sorted by origin.
+def quantiles_for(origin: np.ndarray, cal_target: np.ndarray, cal_score: np.ndarray, levels: list[float],
+                  window_days: int, min_errors: int) -> tuple[dict[float, np.ndarray], np.ndarray]:
+    """Conformal quantiles for forecasts made at `origin`, from a pool of resolved errors.
 
-    For forecast i the calibration scores are those j with target_j strictly before origin_i and target_j within
-    `window_days` before origin_i. Returns ({level: q_i}, n_calibration_i); q is NaN when fewer than `min_errors`
-    usable scores exist. `target` must be non-decreasing (true for a fixed horizon sorted by origin).
+    The pool is (cal_target, cal_score), with `cal_target` (the dates the errors became known) sorted ascending. For each origin the
+    calibration set is the scores whose target is STRICTLY before the origin and within `window_days` before it; with fewer than
+    `min_errors` usable scores no interval is issued (NaN). The quantile is the k-th smallest with k = ceil((n + 1) x level).
+    Returns ({level: q per origin}, number of calibration errors per origin).
     """
-    o, t = origin.astype("datetime64[ns]").astype("int64"), target.astype("datetime64[ns]").astype("int64")
+    o = np.asarray(origin).astype("datetime64[ns]").astype("int64")
+    t = np.asarray(cal_target).astype("datetime64[ns]").astype("int64")
     lo = np.searchsorted(t, o - window_days * NS_DAY, side="left")
     hi = np.searchsorted(t, o, side="left")           # strictly before the origin
     out = {lv: np.full(len(o), np.nan) for lv in levels}
     n_cal = np.zeros(len(o), dtype=int)
     for i in range(len(o)):
-        w = score[lo[i]:hi[i]]
+        w = cal_score[lo[i]:hi[i]]
         w = w[~np.isnan(w)]
         n = len(w)
         n_cal[i] = n
@@ -94,6 +96,13 @@ def conformal_halfwidths(origin: np.ndarray, target: np.ndarray, score: np.ndarr
             if k <= n:
                 out[lv][i] = np.partition(w, k - 1)[k - 1]
     return out, n_cal
+
+
+def conformal_halfwidths(origin: np.ndarray, target: np.ndarray, score: np.ndarray, levels: list[float],
+                         window_days: int, min_errors: int) -> tuple[dict[float, np.ndarray], np.ndarray]:
+    """Rolling split-conformal quantiles for one (market, horizon) series sorted by origin: each forecast is calibrated on the
+    errors of the earlier forecasts of the same series (see `quantiles_for`). `target` must be non-decreasing."""
+    return quantiles_for(origin, target, score, levels, window_days, min_errors)
 
 
 def add_intervals(fr: pd.DataFrame, levels: list[float], window_days: int, min_errors: int) -> pd.DataFrame:

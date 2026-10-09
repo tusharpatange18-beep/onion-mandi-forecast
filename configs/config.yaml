@@ -199,3 +199,22 @@ anomalies:
     seed: 7
     min_separation_days: 45
     window: ["2020-01-01", "2024-12-31"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Phase 5: serving. CONSTRAINT: the dataset ends 2024-12-31, so "latest" forecasts are as of the last data date, not live.
+serving:
+  forecasts_file: results/forecasts.parquet     # written by `python -m mandi.forecast`; not in git
+  results_dir: results                          # tables the API caveats and the dashboard read
+  panel_file: data/processed/panel.parquet      # price history for the dashboard; mounted read-only, not in git
+  history_origins: 60                           # forecasts written for the last N origins per market and horizon
+  horizons: [7, 30]
+  api:
+    version: "1.0.0"
+    host: "0.0.0.0"
+    port: 8000
+    long_gap_days: 7                            # caveat if the quote before the origin was this many days earlier, or the latest quote is this stale
+  dashboard:
+    api_url: "http://localhost:8000"            # overridden by MANDI_API_URL (in docker-compose: http://api:8000)
+    port: 8501
+    history_days: 365
+    request_timeout_seconds: 5
