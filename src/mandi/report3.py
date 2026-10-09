@@ -19,14 +19,15 @@ def _fmt(df: pd.DataFrame) -> pd.DataFrame:
     """Round for display: percentages to 1 decimal, rupee/other floats to 2-3 significant decimals."""
     out = df.copy()
     for c in out.columns:
+        name = str(c)
         if pd.api.types.is_float_dtype(out[c]):
-            if c in PCT_COLS or c.endswith("_pct"):
+            if name in PCT_COLS or name.endswith("_pct"):
                 out[c] = out[c].round(1)
-            elif c in ("DM",):
+            elif name in ("DM",):
                 out[c] = out[c].round(2)
-            elif c in ("p_value", "p_holm"):
+            elif name in ("p_value", "p_holm"):
                 out[c] = out[c].round(4)
-            elif c.startswith("MAE_log") or c.startswith("logMAE") or c.startswith("score") or c.startswith("fold_"):
+            elif name.startswith("MAE_log") or name.startswith("logMAE") or name.startswith("score") or name.startswith("fold_"):
                 out[c] = out[c].round(4)
             else:
                 out[c] = out[c].round(2)

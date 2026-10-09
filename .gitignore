@@ -18,3 +18,6 @@ results/eda/
 # Phase 3 run outputs (derived data)
 results/runs/
 results/*.parquet
+
+# row-level anomaly list (individual market-dates; derived data)
+results/anomalies.csv

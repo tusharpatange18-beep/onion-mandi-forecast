@@ -1,0 +1,11 @@
+market,h,forecasts,without_interval,min_calibration_errors,median_calibration_errors,seeded_with_tuning_forecasts
+Kolhapur,7,1149,0,163,239.0,True
+Kolhapur,30,933,0,122,199.0,True
+Pune,7,1211,0,195,248.0,True
+Pune,30,983,0,147,209.0,True
+Sambhajinagar,7,1185,0,185,238.0,True
+Sambhajinagar,30,956,0,146,196.0,True
+Solapur,7,956,0,139,195.5,True
+Solapur,30,773,0,102,162.0,True
+Vashi,7,1113,0,181,220.0,True
+Vashi,30,907,0,149,185.0,True

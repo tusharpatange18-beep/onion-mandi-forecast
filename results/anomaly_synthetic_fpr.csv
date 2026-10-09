@@ -1,0 +1,9 @@
+label,detector,kind,false_positive_rate,n
+"synthetic test of the detector, not data",forecast_surprise_h30,series with injected spikes (non-spike weeks/days),0.04561124646918019,100
+"synthetic test of the detector, not data",forecast_surprise_h30,unmodified real series,0.04871772808979084,5
+"synthetic test of the detector, not data",forecast_surprise_h7,series with injected spikes (non-spike weeks/days),0.04045376382529957,100
+"synthetic test of the detector, not data",forecast_surprise_h7,unmodified real series,0.048152092223803636,5
+"synthetic test of the detector, not data",stl_residual,series with injected spikes (non-spike weeks/days),0.19096702836229518,100
+"synthetic test of the detector, not data",stl_residual,unmodified real series,0.18715305096470608,5
+"synthetic test of the detector, not data",stl_residual_NONROBUST_diagnostic,series with injected spikes (non-spike weeks/days),0.0059114949059591105,100
+"synthetic test of the detector, not data",stl_residual_NONROBUST_diagnostic,unmodified real series,0.005273600698129048,5
