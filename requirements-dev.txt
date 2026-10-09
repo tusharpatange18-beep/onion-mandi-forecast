@@ -1,0 +1,6 @@
+# Development-only tools for executing and exporting notebooks. Not needed for the pipeline, API or dashboard.
+# NOTE: executing notebooks is currently blocked on this machine: Windows Application Control blocks
+# Scripts\jupyter-nbconvert.exe (unsigned launcher). Installed and pinned, but not used.
+jupyter==1.1.1
+ipykernel==7.4.0
+nbconvert==7.17.1
