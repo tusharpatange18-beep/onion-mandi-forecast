@@ -220,6 +220,15 @@ def build() -> str:
     a(_md(rob[rob["model"].isin(["lgbm", "base_naive"])][["market", "h", "model", "n", "median_AE", "median_AE_strongest_baseline", "win_rate_vs_strongest_pct", "win_rate_vs_naive_pct"]]))
     a("")
 
+    if (R / "gain_concentration.csv").exists():
+        gc = _csv("gain_concentration")
+        a("### 5.4 Where does the mean gain come from? (analysis only)")
+        a("")
+        a("Saving on each forecast = |strongest-baseline error| - |headline error| in rupees. The table shows how much of the total saving comes from the 10% of forecasts with the largest baseline errors (the large moves), "
+          "the share of forecasts on which the model is better, and the typical (median) saving. A mean gain that comes from the large moves with a zero median saving means the model is tied on ordinary days.")
+        a("")
+        a(_md(gc))
+        a("")
     a("## 6. Error analysis")
     a("")
     a("Segments are defined by the **target date** (the date the price is realised) for event periods, and by the days since the previous observed quote before the origin for gaps. "

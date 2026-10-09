@@ -148,6 +148,34 @@ def loss_year_breakdown(fair: pd.DataFrame, summ: pd.DataFrame, headline: dict[i
     return bm, pd.DataFrame(rows)
 
 
+def gain_concentration(fair: pd.DataFrame, summ: pd.DataFrame, headline: dict[int, str], top_share: float = 0.10) -> pd.DataFrame:
+    """Where does the headline model's mean gain over the strongest baseline come from?
+
+    Per market and horizon: the saving on each forecast is |baseline error| - |model error| (rupees). The table gives the
+    share of the total saving that comes from the `top_share` of forecasts with the largest baseline errors (the large
+    moves), the share of forecasts on which the model is better, the median saving, and the mean saving without the large moves.
+    """
+    sb = summ.set_index(["market", "h"])["strongest_baseline"].to_dict()
+    rows = []
+    for (m, h), g in fair.groupby(["market", "h"]):
+        y = np.exp(g["y_log"].to_numpy())
+        e_b = np.abs(y - np.exp(g[sb[(m, h)]].to_numpy()))
+        e_m = np.abs(y - np.exp(g[headline[h]].to_numpy()))
+        saving = e_b - e_m
+        order = np.argsort(-e_b)
+        k = int(np.ceil(top_share * len(g)))
+        top, rest = order[:k], order[k:]
+        total = saving.sum()
+        rows.append({"market": m, "h": h, "n": len(g), "mean_saving_rs": saving.mean(), "median_saving_rs": float(np.median(saving)),
+                     "share_of_forecasts_model_better_pct": 100 * float((saving > 0).mean()),
+                     f"share_of_total_saving_from_top_{int(top_share * 100)}pct_largest_baseline_errors_pct": 100 * float(saving[top].sum() / total) if total > 0 else np.nan,
+                     "mean_saving_rs_excluding_top": float(saving[rest].mean()), "mean_saving_rs_top": float(saving[top].mean())})
+    t = pd.DataFrame(rows)
+    macro = t.drop(columns="market").groupby("h").mean().reset_index()
+    macro.insert(0, "market", "ALL (mean of markets)")
+    return pd.concat([t, macro], ignore_index=True)
+
+
 def main() -> None:
     """Write results/bootstrap_ci.csv, holm_dm.csv, loss_2021_by_month.csv and loss_2021_by_market.csv."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -164,6 +192,7 @@ def main() -> None:
     ci = pd.DataFrame(rows)
     ci.to_csv(ROOT / "results" / "bootstrap_ci.csv", index=False)
     holm_table(dm).to_csv(ROOT / "results" / "holm_dm.csv", index=False)
+    gain_concentration(fair, summ, headline).to_csv(ROOT / "results" / "gain_concentration.csv", index=False)
     bm, bk = loss_year_breakdown(fair, summ, headline, 2021)
     bm.to_csv(ROOT / "results" / "loss_2021_by_month.csv", index=False)
     bk.to_csv(ROOT / "results" / "loss_2021_by_market.csv", index=False)

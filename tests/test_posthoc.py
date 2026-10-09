@@ -96,3 +96,21 @@ def test_loss_year_breakdown_counts_add_up_and_flags_the_losing_month():
     assert (bm[bm["month"] == 6]["impr_vs_strongest_pct"] < 0).all()
     assert (bm[bm["month"] == 5]["impr_vs_strongest_pct"] > 0).all()
     assert set(bk["period"]) == {"2021", "other years"}
+
+
+def test_gain_concentration_attributes_the_saving_to_the_large_moves():
+    rng = np.random.default_rng(0)
+    n = 1000
+    y = np.log(np.full(n, 1000.0))
+    e = rng.normal(0, 0.02, n)
+    big = np.arange(n) < 100                              # 10% of forecasts are large moves for the baseline
+    e[big] = 0.5
+    f = pd.DataFrame({"market": "A", "h": 7, "origin": pd.date_range("2020-01-01", periods=n), "y_log": y, "base_naive": y + e,
+                      "base_mean3": y + e * 3, "base_seasonal": y + e * 9, "lgbm": y + np.where(big, 0.1, e), "ets": y, "sarima": y, "prophet": y, "prophet_anchored": y})
+    summ = pd.DataFrame({"market": ["A"], "h": [7], "strongest_baseline": ["base_naive"]})
+    g = PH.gain_concentration(f, summ, {7: "lgbm"})
+    r = g[g["market"] == "A"].iloc[0]
+    assert r["share_of_total_saving_from_top_10pct_largest_baseline_errors_pct"] > 99      # all the gain is in the large moves
+    assert np.isclose(r["median_saving_rs"], 0.0)                                          # typical forecasts are unchanged
+    assert np.isclose(r["mean_saving_rs_excluding_top"], 0.0)
+    assert (g["market"] == "ALL (mean of markets)").sum() == 1
