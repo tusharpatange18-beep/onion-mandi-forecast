@@ -32,6 +32,11 @@ jobs:
         # They are absent in CI, so they skip; -rs prints each skipped test with the missing paths.
         run: python -m pytest -rs
 
+      - name: Backtesting framework end to end on synthetic prices (the one-command demo)
+        env:
+          PYTHONPATH: src:.
+        run: bash run.sh demo
+
       - name: README result blocks are generated from results/*.csv
         env:
           PYTHONPATH: src:.
