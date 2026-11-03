@@ -2,6 +2,18 @@
 
 [![ci](https://github.com/tusharpatange18-beep/onion-mandi-forecast/actions/workflows/ci.yml/badge.svg)](https://github.com/tusharpatange18-beep/onion-mandi-forecast/actions/workflows/ci.yml)
 
+## Key results in 5 lines
+
+<!-- BEGIN GENERATED: key_results -->
+1. **Accuracy:** at 30 days LightGBM cuts MAE by **7.7%** vs the strongest baseline (95% bootstrap interval -1.8% to +14.1%, still includes zero); at 7 days it is a statistical tie with naive.
+2. **Tail risk:** the mean of its worst 5% of 30-day errors is Rs 1817 vs Rs 1944 for naive (-6.5%); the largest single error is Rs 3327.
+3. **Trading-style test (illustration only, mandi prices are not tradable):** a long/flat rule on the 30-day forecast gives Sharpe 2.66, max drawdown -25% of capital and win rate 63% (always-long: Sharpe 1.11, drawdown -101%).
+4. **Uncertainty:** 80% conformal intervals cover 82.1% at 30 days on average, but under-cover in export-ban shocks (see Results).
+5. **Method:** rolling-origin backtest, label embargo, model choice frozen and committed before the 2020-2024 test run, one reusable `Model` / `Backtester` interface (`src/mandi/framework.py`).
+<!-- END GENERATED: key_results -->
+
+*Rerun everything that does not need the raw data with `make demo` (Linux, macOS, Windows with make) or `./run.sh demo`; see [Reproduce](#reproduce).*
+
 Daily onion prices in Indian wholesale markets (mandis) swing by a factor of three or more within a year. This project forecasts the
 modal price 7 and 30 days ahead in five Maharashtra mandis, attaches calibrated prediction intervals, flags anomalous price moves, and
 serves the forecasts through an API and a dashboard. The evaluation is built to be honest first: every model is compared with simple
@@ -21,7 +33,7 @@ intervals that are right on average but too narrow when a shock starts. Those ar
 
 > The dataset ends 2024-12-31, so the served "latest" forecasts are as of the last data date, **not live**.
 
-**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) ·
+**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) · [Tail risk and trading-style evaluation](#tail-risk-and-a-trading-style-evaluation) ·
 [Error analysis](#error-analysis) · [Anomaly detection](#anomaly-detection) · [Limitations and next steps](#limitations-and-next-steps) ·
 [Reproduce](#reproduce) · [Dashboard](#dashboard) · [Repository map](#repository-map) · [Licence and credits](#licence-and-credits)
 
@@ -175,6 +187,70 @@ Rolling split-conformal intervals, 2020-2024 (macro over markets; block-bootstra
 
 ![30-day forecasts with intervals in a normal period and two export-ban periods](results/figures/interval_fan_charts.png)
 
+## Tail risk and a trading-style evaluation
+
+**Backtesting framework.** The evaluation loop is one reusable interface in [`src/mandi/framework.py`](src/mandi/framework.py): a `Model` base class
+(`fit` / `predict`), a `Backtester.run(model)` that applies the rolling-origin, expanding-window schedule with the label embargo, and a
+`BacktestResult` that returns point metrics, tail-risk metrics and the trading evaluation from the same forecasts. The LightGBM runner used for
+the final results goes through the same `Backtester` (unchanged numbers, covered by the existing embargo tests). ETS, SARIMA and Prophet keep
+their per-market runners, and their saved forecasts can be scored with `BacktestResult.from_columns`.
+
+```python
+from mandi.framework import Backtester, ColumnModel, LGBMModel
+bt = Backtester(origin_table_h30, window=("2020-01-01", "2024-12-31"))
+naive, lgbm = bt.compare([ColumnModel("base_naive"), LGBMModel(params, features)])   # scored on exactly the same forecasts
+lgbm.point_metrics(), lgbm.tail_risk(), lgbm.trading(threshold=0.03)
+```
+
+**Tail risk next to the MAE.** An average error says little about the forecasts that hurt. The table adds the 95th-percentile error, the mean of the
+worst 5% of errors (CVaR-style) and the largest single error:
+
+<!-- BEGIN GENERATED: tail_risk -->
+Tail of the absolute error, pooled over the five markets, on the same forecasts for every model (2020-2024). The MAE tables hide how bad the worst forecasts are; the CVaR-style column is the mean of the worst 5% of errors:
+
+| h | model | forecasts | MAE (Rs) | 95th pct error (Rs) | mean of worst 5% (Rs, CVaR-style) | max error (Rs) | worst 5% as % of price |
+|---|---|---|---|---|---|---|---|
+| 7 | LightGBM | 5614 | 219 | 757 | 1062 | 4006 | 56% |
+| 7 | naive (last price) | 5614 | 226 | 800 | 1121 | 4100 | 60% |
+| 7 | mean of last 3 quotes | 5614 | 234 | 833 | 1151 | 3900 | 61% |
+| 7 | seasonal naive (365 d) | 5614 | 722 | 2000 | 2745 | 7500 | 163% |
+| 30 | LightGBM | 4552 | 424 | 1390 | 1817 | 3327 | 119% |
+| 30 | naive (last price) | 4552 | 461 | 1500 | 1944 | 3850 | 136% |
+| 30 | mean of last 3 quotes | 4552 | 466 | 1541 | 1944 | 3333 | 139% |
+| 30 | seasonal naive (365 d) | 4552 | 697 | 1900 | 2653 | 7500 | 157% |
+<!-- END GENERATED: tail_risk -->
+
+**A trading-style evaluation (an illustration of the method, not a strategy).** *Mandi prices are not directly tradable:* no instrument pays a mandi's
+modal price in 30 days, quotes are reported prices rather than fills, and there is no short side or liquidity model here. The point is to show how
+a forecast becomes a rule and is scored with desk-style metrics (P&L, drawdown, Sharpe, win rate, tail loss). The rule is fixed in advance: go long
+when the forecast beats today's price by more than 3%, otherwise stay flat; hold for the horizon; one position per market at a time. Two benchmarks use the same
+trade schedule: always long, and a no-model momentum rule (price up more than 3% over the last `h` days).
+
+<!-- BEGIN GENERATED: trading -->
+Long/flat rule on the frozen LightGBM forecasts, 2020-2024, threshold 3% (fixed in advance), fixed notional, no overlapping trades, no costs (a 100 bps round-trip cost is in `results/trading_sensitivity.csv`):
+
+| h | rule | trades | P&L (% of capital) | Sharpe | max drawdown | win rate | mean of worst 5% of trades | worst trade |
+|---|---|---|---|---|---|---|---|---|
+| 7 | long/flat on LightGBM forecast | 624 | +879% | 3.55 | -51% | 55% | -28% | -47% |
+| 7 | momentum rule: price up >3% over the last 7 days (no model) | 669 | -19% | -0.07 | -196% | 37% | -36% | -59% |
+| 7 | always long (benchmark, same trade schedule) | 1182 | +435% | 1.13 | -104% | 42% | -34% | -51% |
+| 30 | long/flat on LightGBM forecast | 175 | +818% | 2.66 | -25% | 63% | -38% | -53% |
+| 30 | momentum rule: price up >3% over the last 30 days (no model) | 194 | +351% | 1.20 | -101% | 49% | -54% | -67% |
+| 30 | always long (benchmark, same trade schedule) | 287 | +430% | 1.11 | -101% | 46% | -53% | -67% |
+<!-- END GENERATED: trading -->
+
+![Equal-weight equity of the long/flat rule and the benchmarks](results/figures/trading_equity.png)
+
+How to read it, and why not to over-read it:
+
+- **The 3% threshold was set in the code (`HEADLINE_THRESHOLD` in `src/mandi/report_risk.py`) before the trading table was first produced, and was never changed afterwards.** It was not tuned on the 2020-2024 results; `results/trading_sensitivity.csv` shows 0% and 6% and a 100 bps cost instead of picking the best, and the Sharpe stays positive in all of them. The git history cannot prove the timing on its own, because the tables were generated locally before the first commit; the rule is also recorded as a decision in `project.md`.
+- **Why the always-long drawdown is below -100%:** P&L is summed at fixed notional and never compounded, so a drawdown is measured in units of the starting capital and can exceed -100% when always-long keeps losing on a rising number of trades; it would be impossible with compounded returns.
+- P&L is at fixed notional and added up, not compounded, and is in % of starting capital (split equally over five markets). Sharpe is annualised from daily P&L with a zero risk-free rate.
+- The model beats both benchmarks, but the headline accuracy gain over naive is modest (+7.7% MAE at 30 days, with an interval that includes zero), so the high Sharpe
+  reflects that a few large price moves are forecast in direction, not that prices are easy to predict. Year-by-year P&L is in `results/trading_by_year.csv`; it is positive every year, including 2021, the year the MAE loses.
+- Only trades whose target-date quote exists are scored (as in every table here); a real exit would need the nearest quote, so this flatters the result slightly. Quotes are modal prices with reporting lags.
+- One test path, five correlated markets, no market impact and no storage, transport or spoilage costs. This is **not** evidence of a profitable strategy.
+
 ## Error analysis
 
 **By year.** One year goes clearly against the model at both horizons; the loss is concentrated in a few months and is not explained by
@@ -295,7 +371,18 @@ Recall and false-positive rate from injecting synthetic spikes into an in-memory
 
 ## Reproduce
 
-Requirements: Python 3.12 (the project was developed on Windows 11 with Python 3.12.10; Python 3.14 is not used). The data must be
+**One command, no data needed** (Linux, macOS, or Windows with `make`/Git Bash; Windows PowerShell: `.\scripts.ps1 demo`):
+
+```bash
+git clone https://github.com/tusharpatange18-beep/onion-mandi-forecast.git && cd onion-mandi-forecast
+make setup && make demo        # or: ./run.sh setup && ./run.sh demo
+```
+
+`make demo` runs the backtesting framework end to end on **synthetic** prices (refit schedule, embargo, fairness alignment, tail-risk and trading
+metrics) so a reviewer can see it run in about 15 seconds. `make test` runs the tests and `make check` also verifies the README result blocks, as CI does.
+The real results need the downloaded data (below) and `make report` regenerates the tail-risk and trading tables from the final backtest forecasts.
+
+**Full pipeline on the real data.** Requirements: Python 3.12 (the project was developed on Windows 11 with Python 3.12.10; Python 3.14 is not used). The data must be
 downloaded by hand from the DOI above to `data/raw/preprocessed_onion_2014_2024_prices_weather_events.parquet`.
 
 ```bash
@@ -319,6 +406,7 @@ python -m mandi.intervals                  # conformal intervals (seeded with th
 python -m mandi.anomalies                  # detectors and synthetic validation
 python -m mandi.report4                    # docs/interval_report.md, docs/anomaly_report.md
 python -m mandi.forecast                   # serving forecasts -> results/forecasts.parquet
+python -m mandi.report_risk                # tail-risk and trading-style tables from results/fair_forecasts.parquet
 python -m mandi.readme_tables              # regenerate the result blocks of this README
 python -m pytest -rs                       # tests; those needing local data skip and say which files are missing
 ```
@@ -348,6 +436,8 @@ result blocks match `results/*.csv`, and builds the Docker image and checks the 
 | Path | What it holds |
 |---|---|
 | `src/mandi/` | pipeline: cleaning, EDA, features, models, backtest, evaluation, intervals, anomalies, serving forecasts, report generators |
+| `src/mandi/framework.py`, `risk.py`, `trading.py` | the reusable `Model` / `Backtester` interface, tail-risk metrics, and the long/flat trading evaluation |
+| `src/mandi/demo.py`, `Makefile`, `run.sh`, `scripts.ps1` | one-command demo on synthetic data and run scripts for Linux/macOS/Windows |
 | `api/main.py`, `app/dashboard.py` | FastAPI service and Streamlit dashboard |
 | `configs/config.yaml` | every path, market, horizon, seed and model setting; `configs/selected_models.yaml` is the frozen selection |
 | `results/` | committed aggregate tables and figures (row-level outputs are git-ignored) |

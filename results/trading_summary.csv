@@ -1,0 +1,7 @@
+h,strategy,trades,exposure_pct,total_return_pct,mean_trade_return_pct,win_rate_pct,sharpe,max_drawdown_pct,cvar5_trade_return_pct,worst_trade_pct
+7,long/flat on LightGBM forecast,624,47.8423,878.5864,7.04,55.4487,3.5525,-50.8476,-27.7808,-46.6667
+7,momentum rule: price up >3% over the last 7 days (no model),669,51.2924,-18.8953,-0.1412,36.6218,-0.0728,-195.9496,-36.2444,-59.0909
+7,"always long (benchmark, same trade schedule)",1182,90.6243,434.7752,1.8392,42.132,1.1337,-104.2982,-34.4351,-50.9091
+30,long/flat on LightGBM forecast,175,57.5027,818.362,23.3818,62.8571,2.6574,-24.8675,-38.2116,-53.3333
+30,momentum rule: price up >3% over the last 30 days (no model),194,63.7459,351.1906,9.0513,49.4845,1.1961,-101.4248,-54.0611,-66.6667
+30,"always long (benchmark, same trade schedule)",287,94.3045,429.7037,7.4861,46.3415,1.1144,-101.3495,-53.1779,-66.6667
