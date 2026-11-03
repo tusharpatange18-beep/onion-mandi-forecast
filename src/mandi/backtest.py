@@ -1,4 +1,4 @@
-﻿"""Phase 3: rolling-origin, expanding-window backtest.
+"""Phase 3: rolling-origin, expanding-window backtest.
 
 * Models are refit on the first day of every month (the retrain interval, see config) using only data before that
   day; the refit applies to origins in that month. For LightGBM, a training row is used only if its *target date* is

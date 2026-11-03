@@ -251,6 +251,31 @@ How to read it, and why not to over-read it:
 - Only trades whose target-date quote exists are scored (as in every table here); a real exit would need the nearest quote, so this flatters the result slightly. Quotes are modal prices with reporting lags.
 - One test path, five correlated markets, no market impact and no storage, transport or spoilage costs. This is **not** evidence of a profitable strategy.
 
+**Four caveats, each measured.** The headline numbers above are the optimistic case. The table below re-scores the same trades four ways
+(`results/trading_robustness.csv`, produced by `python -m mandi.report_risk`):
+
+1. **No execution lag.** The headline trades at the quote of the day the signal is computed, which nobody can do with a reported modal price.
+   The table re-enters at the market's next quote (usually one or two days later), keeping the same signal and exit. **At 7 days this cuts the P&L roughly in half and the win rate
+   falls below 50%; the 7-day trading result is therefore fragile. At 30 days it makes no material difference.**
+2. **Simple-return inflation.** Trade returns are simple percentage changes, so large up-moves count for more than equal down-moves, and a sum of simple returns exceeds the sum of log
+   returns (the table shows both). The headline P&L uses simple returns at fixed notional.
+3. **Open-trade losses are not counted.** P&L and drawdown are booked when a trade exits, so a position that fell sharply and recovered shows no loss. The table reports the
+   worst unrealised loss inside each trade (lowest observed quote after entry, against the entry price); the drawdown figures above understate the real path risk.
+4. **Profit concentration.** A few large price spikes carry a sizeable share of the profit. The table gives the share from the best 5% of trades and the P&L left without them.
+
+<!-- BEGIN GENERATED: trading_robustness -->
+Checks on the headline long/flat result (LightGBM, threshold 3%, 2020-2024; P&L in % of starting capital):
+
+| h | headline P&L / win rate / Sharpe | 1. entering at the next quote instead | 2. sum of simple vs log returns | 3. median / worst unrealised loss inside a trade | 3. trades that dipped more than 10% below entry | 4. share of P&L from the best 5% of trades | 4. P&L without those trades |
+|---|---|---|---|---|---|---|---|
+| 7 | +879% / 55% / 3.55 | +420% / 45% / 1.95 | +879% vs +661% | -3% / -59% | 25% | 41% (32 trades) | +518% |
+| 30 | +818% / 63% / 2.66 | +825% / 63% / 2.72 | +818% vs +547% | -9% / -64% | 42% | 32% (9 trades) | +555% |
+<!-- END GENERATED: trading_robustness -->
+
+In short: a one-quote entry lag roughly halves the 7-day P&L (the Sharpe stays positive but is much lower) and leaves the 30-day P&L unchanged; without the best 5% of trades both
+stay positive; but simple returns flatter the totals, and many trades sit well below their entry price before they recover (about four in ten at 30 days dipped more than 10%).
+Read the headline Sharpe with that in mind.
+
 ## Error analysis
 
 **By year.** One year goes clearly against the model at both horizons; the loss is concentrated in a few months and is not explained by

@@ -106,15 +106,60 @@ def past_return(frame: pd.DataFrame, lookback_days: int, tolerance_days: int = 3
     return out
 
 
+def with_entry_lag(frame: pd.DataFrame) -> pd.DataFrame:
+    """Enter at the market's NEXT quote after the origin instead of the origin quote itself (a one-quote execution lag).
+
+    The signal is still computed at the origin; the trade starts at the next observed quote (usually 1-2 days later), so its
+    return is realised price at the target over that later price. Trades whose next quote falls on or after the target date are dropped.
+    """
+    f = frame.sort_values(["market", "origin"]).copy()
+    nxt_p, nxt_t = f.groupby("market")["p0"].shift(-1), f.groupby("market")["origin"].shift(-1)
+    f = f.assign(p0_signal=f["p0"], p0=nxt_p)
+    return f[nxt_t.notna() & (nxt_t < f["target_date"])].reset_index(drop=True)
+
+
+def concentration(trades: pd.DataFrame, n_markets: int, share: float = 0.05) -> dict[str, float]:
+    """How much of the total P&L the best `share` of trades carries, and the P&L (in % of capital) left without them."""
+    r = np.sort(trades["ret"].to_numpy())[::-1]
+    k = max(1, int(np.ceil(share * len(r)))) if len(r) else 0
+    total = float(r.sum()) if len(r) else 0.0
+    return {"top_trades": k, "top_share_of_pnl_pct": 100 * float(r[:k].sum()) / total if total else np.nan,
+            "pnl_without_top_pct_of_capital": 100 * (total - float(r[:k].sum())) / max(n_markets, 1)}
+
+
+def adverse_excursion(trades: pd.DataFrame, frame: pd.DataFrame) -> pd.Series:
+    """Worst unrealised loss inside each trade: the lowest observed quote between entry and exit relative to the entry price.
+
+    The P&L and drawdown figures book a trade only at its exit, so a position that fell 40% and recovered shows no loss there; this
+    is that hidden path risk. Uses the quotes in `frame` (one per market and origin day); the exit quote is the realised target.
+    """
+    out = []
+    for m, g in trades.groupby("market"):
+        q = frame[frame["market"] == m].sort_values("origin")
+        o, p = q["origin"].to_numpy(), np.exp(q["p0"].to_numpy())
+        for entry, exit_, ret in zip(g["entry"].to_numpy(), g["exit"].to_numpy(), g["ret"].to_numpy()):
+            i0 = np.searchsorted(o, entry)
+            inside = p[(o >= entry) & (o <= exit_)]
+            entry_price = p[i0] if i0 < len(p) and o[i0] == entry else np.nan
+            path = np.append(inside, entry_price * (1 + ret)) if np.isfinite(entry_price) else inside
+            out.append(float(path.min() / entry_price - 1) if np.isfinite(entry_price) else np.nan)
+    return pd.Series(out, dtype=float)
+
+
 def backtest_long_flat(frame: pd.DataFrame, threshold: float = 0.03, cost_bps: float = 0.0, always_long: bool = False,
-                       momentum_days: int | None = None) -> TradingResult:
+                       momentum_days: int | None = None, entry_lag: bool = False) -> TradingResult:
     """Score the long/flat rule on a forecast frame (columns market, origin, target_date, y_log, p0, f_log).
 
     `always_long=True` ignores the forecast and enters whenever allowed: the buy-and-hold-style benchmark with the same trade schedule.
     `momentum_days=k` replaces the forecast by "the price rose more than `threshold` over the last k days": the no-model benchmark.
+    `entry_lag=True` trades at the next quote after the signal instead of the signal-day quote (see `with_entry_lag`).
     """
     f = frame.dropna(subset=["f_log", "y_log", "p0"]).reset_index(drop=True)
-    expected = np.exp(f["f_log"].to_numpy() - f["p0"].to_numpy()) - 1
+    signal_p0 = f["p0"].to_numpy()
+    if entry_lag:
+        f = with_entry_lag(f)
+        signal_p0 = f["p0_signal"].to_numpy()
+    expected = np.exp(f["f_log"].to_numpy() - signal_p0) - 1
     if momentum_days is not None:
         expected = np.nan_to_num(past_return(f, momentum_days), nan=-1.0)
     enter = np.ones(len(f), dtype=bool) if always_long else expected > threshold

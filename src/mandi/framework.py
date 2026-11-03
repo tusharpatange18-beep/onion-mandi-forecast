@@ -1,4 +1,4 @@
-﻿"""A small, reusable backtesting interface: ``Model`` (fit / predict), ``Backtester.run()`` and ``BacktestResult``.
+"""A small, reusable backtesting interface: ``Model`` (fit / predict), ``Backtester.run()`` and ``BacktestResult``.
 
 The rules that make the evaluation honest live here, in one place:
 
@@ -139,9 +139,9 @@ class BacktestResult:
         pct = risk.tail_risk(rel, q)
         return {**risk.tail_risk(e, q), **{k + "_pct": pct[k] for k in ("MAE", "p95_abs_error", "cvar5_abs_error", "max_abs_error")}}
 
-    def trading(self, threshold: float = 0.03, cost_bps: float = 0.0) -> trading.TradingResult:
+    def trading(self, threshold: float = 0.03, cost_bps: float = 0.0, entry_lag: bool = False) -> trading.TradingResult:
         """Illustrative long/flat strategy driven by this model's forecasts; see ``mandi.trading``."""
-        return trading.backtest_long_flat(self.frame, threshold=threshold, cost_bps=cost_bps)
+        return trading.backtest_long_flat(self.frame, threshold=threshold, cost_bps=cost_bps, entry_lag=entry_lag)
 
 
 # --------------------------------------------------------------------------- backtester

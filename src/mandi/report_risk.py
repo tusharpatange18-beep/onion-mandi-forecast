@@ -11,11 +11,12 @@ The long/flat threshold (3%) was fixed before looking at the result; the sensiti
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from mandi.config import ROOT
 from mandi.framework import BacktestResult
-from mandi.trading import backtest_long_flat
+from mandi.trading import adverse_excursion, backtest_long_flat, concentration
 
 R = ROOT / "results"
 MODELS = {"lgbm": "LightGBM", "base_naive": "naive (last price)", "base_mean3": "mean of last 3 quotes", "base_seasonal": "seasonal naive (365 d)"}
@@ -54,6 +55,26 @@ def trading_tables(fair: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict
     return pd.DataFrame(summ), pd.DataFrame(sens), curves, pd.concat(years, ignore_index=True)[["h", "year", "trades", "pnl_pct_of_capital", "win_rate_pct"]]
 
 
+def robustness_table(fair: pd.DataFrame) -> pd.DataFrame:
+    """Checks on the headline long/flat result: execution lag, simple vs log returns, profit concentration, unrealised losses inside trades."""
+    rows = []
+    for h, g in fair.groupby("h"):
+        res = BacktestResult.from_columns(g, "lgbm", "LightGBM")
+        base, lag = res.trading(HEADLINE_THRESHOLD), res.trading(HEADLINE_THRESHOLD, entry_lag=True)
+        t, n = base.trades, base.n_markets
+        conc = concentration(t, n)
+        ae = adverse_excursion(t, res.frame)
+        rows.append({"h": int(h), "trades": len(t), "pnl_pct_of_capital": base.summary()["total_return_pct"],
+                     "pnl_entry_next_quote_pct": lag.summary()["total_return_pct"], "win_rate_pct": base.summary()["win_rate_pct"],
+                     "win_rate_entry_next_quote_pct": lag.summary()["win_rate_pct"], "sharpe": base.summary()["sharpe"], "sharpe_entry_next_quote": lag.summary()["sharpe"],
+                     "sum_simple_returns_pct_of_capital": 100 * float(t["ret"].sum()) / n, "sum_log_returns_pct_of_capital": 100 * float(np.log1p(t["ret"]).sum()) / n,
+                     "top5pct_trades": conc["top_trades"], "top5pct_share_of_pnl_pct": conc["top_share_of_pnl_pct"],
+                     "pnl_without_top5pct_pct_of_capital": conc["pnl_without_top_pct_of_capital"],
+                     "median_worst_unrealised_loss_pct": 100 * float(ae.median()), "worst_unrealised_loss_pct": 100 * float(ae.min()),
+                     "trades_dipping_over_10pct_share_pct": 100 * float((ae < -0.10).mean())})
+    return pd.DataFrame(rows)
+
+
 def plot_equity(curves: dict[int, dict[str, pd.Series]], path) -> None:
     import matplotlib
 
@@ -80,6 +101,7 @@ def main() -> None:
     tail = tail_table(fair)
     summ, sens, curves, years = trading_tables(fair)
     years.round(4).to_csv(R / "trading_by_year.csv", index=False)
+    robustness_table(fair).round(4).to_csv(R / "trading_robustness.csv", index=False)
     tail.round(4).to_csv(R / "tail_risk.csv", index=False)
     summ.round(4).to_csv(R / "trading_summary.csv", index=False)
     sens.round(4).to_csv(R / "trading_sensitivity.csv", index=False)

@@ -171,6 +171,20 @@ def block_trading() -> str:
             "(a 100 bps round-trip cost is in `results/trading_sensitivity.csv`):\n\n" + _md(pd.DataFrame(rows)))
 
 
+def block_trading_robustness() -> str:
+    t = _csv("trading_robustness")
+    rows = []
+    for _, r in t.iterrows():
+        rows.append({"h": int(r["h"]), "headline P&L / win rate / Sharpe": f"{r['pnl_pct_of_capital']:+.0f}% / {r['win_rate_pct']:.0f}% / {r['sharpe']:.2f}",
+                     "1. entering at the next quote instead": f"{r['pnl_entry_next_quote_pct']:+.0f}% / {r['win_rate_entry_next_quote_pct']:.0f}% / {r['sharpe_entry_next_quote']:.2f}",
+                     "2. sum of simple vs log returns": f"{r['sum_simple_returns_pct_of_capital']:+.0f}% vs {r['sum_log_returns_pct_of_capital']:+.0f}%",
+                     "3. median / worst unrealised loss inside a trade": f"{r['median_worst_unrealised_loss_pct']:.0f}% / {r['worst_unrealised_loss_pct']:.0f}%",
+                     "3. trades that dipped more than 10% below entry": f"{r['trades_dipping_over_10pct_share_pct']:.0f}%",
+                     "4. share of P&L from the best 5% of trades": f"{r['top5pct_share_of_pnl_pct']:.0f}% ({int(r['top5pct_trades'])} trades)",
+                     "4. P&L without those trades": f"{r['pnl_without_top5pct_pct_of_capital']:+.0f}%"})
+    return "Checks on the headline long/flat result (LightGBM, threshold 3%, 2020-2024; P&L in % of starting capital):\n\n" + _md(pd.DataFrame(rows))
+
+
 def block_key_results() -> str:
     b = _csv("bootstrap_ci").set_index("h")
     m = _csv("summary_macro").set_index("h")
@@ -193,7 +207,7 @@ def block_key_results() -> str:
     ])
 
 
-BLOCKS = {"key_results": block_key_results, "tail_risk": block_tail_risk, "trading": block_trading, "headline": block_headline, "macro": block_macro, "per_market": block_per_market, "bootstrap": block_bootstrap, "coverage": block_coverage,
+BLOCKS = {"key_results": block_key_results, "tail_risk": block_tail_risk, "trading": block_trading, "trading_robustness": block_trading_robustness, "headline": block_headline, "macro": block_macro, "per_market": block_per_market, "bootstrap": block_bootstrap, "coverage": block_coverage,
           "per_year": block_per_year, "events": block_events, "gaps": block_gaps, "ablation": block_ablation, "anomalies": block_anomalies}
 PATTERN = re.compile(r"(<!-- BEGIN GENERATED: (\w+) -->\r?\n)(.*?)(<!-- END GENERATED: \2 -->)", re.S)
 
