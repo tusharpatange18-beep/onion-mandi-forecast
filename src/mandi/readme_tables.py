@@ -152,7 +152,48 @@ def block_anomalies() -> str:
     return ("Recall and false-positive rate from injecting synthetic spikes into an in-memory copy of the series (a test of the detectors, not data):\n\n" + _md(pd.DataFrame(rows)))
 
 
-BLOCKS = {"headline": block_headline, "macro": block_macro, "per_market": block_per_market, "bootstrap": block_bootstrap, "coverage": block_coverage,
+def block_tail_risk() -> str:
+    t = _csv("tail_risk")
+    names = {"lgbm": "LightGBM", "base_naive": "naive (last price)", "base_mean3": "mean of last 3 quotes", "base_seasonal": "seasonal naive (365 d)"}
+    rows = [{"h": int(r["h"]), "model": names[r["model"]], "forecasts": int(r["n"]), "MAE (Rs)": f"{r['MAE']:.0f}", "95th pct error (Rs)": f"{r['p95_abs_error']:.0f}",
+             "mean of worst 5% (Rs, CVaR-style)": f"{r['cvar5_abs_error']:.0f}", "max error (Rs)": f"{r['max_abs_error']:.0f}",
+             "worst 5% as % of price": f"{r['cvar5_abs_error_pct']:.0f}%"} for _, r in t.sort_values(["h", "MAE"]).iterrows()]
+    return ("Tail of the absolute error, pooled over the five markets, on the same forecasts for every model (2020-2024). The MAE tables hide how bad the worst forecasts are; "
+            "the CVaR-style column is the mean of the worst 5% of errors:\n\n" + _md(pd.DataFrame(rows)))
+
+
+def block_trading() -> str:
+    t = _csv("trading_summary")
+    rows = [{"h": int(r["h"]), "rule": r["strategy"], "trades": int(r["trades"]), "P&L (% of capital)": f"{r['total_return_pct']:+.0f}%", "Sharpe": f"{r['sharpe']:.2f}",
+             "max drawdown": f"{r['max_drawdown_pct']:.0f}%", "win rate": f"{r['win_rate_pct']:.0f}%", "mean of worst 5% of trades": f"{r['cvar5_trade_return_pct']:.0f}%",
+             "worst trade": f"{r['worst_trade_pct']:.0f}%"} for _, r in t.iterrows()]
+    return ("Long/flat rule on the frozen LightGBM forecasts, 2020-2024, threshold 3% (fixed in advance), fixed notional, no overlapping trades, no costs "
+            "(a 100 bps round-trip cost is in `results/trading_sensitivity.csv`):\n\n" + _md(pd.DataFrame(rows)))
+
+
+def block_key_results() -> str:
+    b = _csv("bootstrap_ci").set_index("h")
+    m = _csv("summary_macro").set_index("h")
+    tl = _csv("tail_risk").set_index(["h", "model"])
+    tr = _csv("trading_summary")
+    lf = tr[tr["strategy"].str.startswith("long/flat")].set_index("h")
+    al = tr[tr["strategy"].str.startswith("always long")].set_index("h")
+    cov = _csv("interval_coverage_macro")
+    c = cov[cov["method"] == "lgbm_abs"].set_index(["h", "level"])["macro_coverage"]
+    cv_gain = 100 * (1 - tl.loc[(30, "lgbm"), "cvar5_abs_error"] / tl.loc[(30, "base_naive"), "cvar5_abs_error"])
+    return "\n".join([
+        f"1. **Accuracy:** at 30 days LightGBM cuts MAE by **{_pct(m.loc[30, 'headline_impr_vs_strongest_pct'], sign=False)}** vs the strongest baseline (95% bootstrap interval {_pct(b.loc[30, 'ci95_low_strongest'])} to "
+        f"{_pct(b.loc[30, 'ci95_high_strongest'])}, still includes zero); at 7 days it is a statistical tie with naive.",
+        f"2. **Tail risk:** the mean of its worst 5% of 30-day errors is Rs {tl.loc[(30, 'lgbm'), 'cvar5_abs_error']:.0f} vs Rs {tl.loc[(30, 'base_naive'), 'cvar5_abs_error']:.0f} for naive "
+        f"({_pct(-cv_gain)}); the largest single error is Rs {tl.loc[(30, 'lgbm'), 'max_abs_error']:.0f}.",
+        f"3. **Trading-style test (illustration only, mandi prices are not tradable):** a long/flat rule on the 30-day forecast gives Sharpe {lf.loc[30, 'sharpe']:.2f}, max drawdown "
+        f"{lf.loc[30, 'max_drawdown_pct']:.0f}% of capital and win rate {lf.loc[30, 'win_rate_pct']:.0f}% (always-long: Sharpe {al.loc[30, 'sharpe']:.2f}, drawdown {al.loc[30, 'max_drawdown_pct']:.0f}%).",
+        f"4. **Uncertainty:** 80% conformal intervals cover {100 * c.loc[(30, 0.8)]:.1f}% at 30 days on average, but under-cover in export-ban shocks (see Results).",
+        "5. **Method:** rolling-origin backtest, label embargo, model choice frozen and committed before the 2020-2024 test run, one reusable `Model` / `Backtester` interface (`src/mandi/framework.py`).",
+    ])
+
+
+BLOCKS = {"key_results": block_key_results, "tail_risk": block_tail_risk, "trading": block_trading, "headline": block_headline, "macro": block_macro, "per_market": block_per_market, "bootstrap": block_bootstrap, "coverage": block_coverage,
           "per_year": block_per_year, "events": block_events, "gaps": block_gaps, "ablation": block_ablation, "anomalies": block_anomalies}
 PATTERN = re.compile(r"(<!-- BEGIN GENERATED: (\w+) -->\r?\n)(.*?)(<!-- END GENERATED: \2 -->)", re.S)
 

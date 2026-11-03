@@ -1,4 +1,4 @@
-"""Phase 3: rolling-origin, expanding-window backtest.
+﻿"""Phase 3: rolling-origin, expanding-window backtest.
 
 * Models are refit on the first day of every month (the retrain interval, see config) using only data before that
   day; the refit applies to origins in that month. For LightGBM, a training row is used only if its *target date* is
@@ -24,6 +24,7 @@ import pandas as pd
 from mandi import features as F
 from mandi import models as M
 from mandi.config import ROOT
+from mandi.framework import Backtester, LGBMModel, refit_blocks as _blocks, refit_schedule  # noqa: F401 (re-exported: the schedule now lives in framework)
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +65,6 @@ def specs_from_config(cfg: dict[str, Any]) -> list[Spec]:
                     p = {"objective": obj, "num_leaves": nl, "min_child_samples": mcs, "n_estimators": ne, "learning_rate": mc["lgbm"]["learning_rate"]}
                     out.append(Spec("lgbm", f"{obj}_nl{nl}_mc{mcs}_n{ne}", tuple(sorted(p.items()))))
     return out
-
-
-def refit_schedule(start: str, end: str) -> list[pd.Timestamp]:
-    """First day of every month from `start` to `end` (the retrain dates)."""
-    return list(pd.date_range(start, end, freq="MS"))
-
-
-def _blocks(refits: list[pd.Timestamp], end: pd.Timestamp) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
-    """(refit date, last day of the block) pairs; origins in the block use the model fitted at the refit date."""
-    ends = [r - pd.Timedelta(days=1) for r in refits[1:]] + [end]
-    return list(zip(refits, ends))
 
 
 # --------------------------------------------------------------------------- worker tasks (top level so they can be pickled)
@@ -153,24 +143,14 @@ def _task_prophet(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]
 
 
 def _task_lgbm(args: tuple) -> tuple[str, int, pd.DataFrame, float, int, int]:
-    """Pooled LightGBM for one horizon across all refit blocks."""
+    """Pooled LightGBM for one horizon across all refit blocks (the rolling-origin loop itself lives in framework.Backtester)."""
     spec, h, table, blocks, seed = args
     t0 = time.time()
-    rows, n_fits = [], 0
-    labelled = table[table["y_log"].notna()]
     dropped = set(spec.p.get("drop", ()))  # feature names removed for the post-hoc ablation (empty for every normal run)
     features = [f for f in F.FEATURE_COLUMNS if f not in dropped]
-    for r, b_end in blocks:
-        train = labelled[labelled["target_date"] < r]
-        test = table[(table["origin"] >= r) & (table["origin"] <= b_end) & table["y_log"].notna()]
-        if len(train) < 500 or len(test) == 0:
-            continue
-        pred = M.lgbm_fit_predict(train, test, features, spec.p, seed)
-        n_fits += 1
-        rows.append(pd.DataFrame({"market_idx": test["market_idx"].to_numpy(), "origin": test["origin"].to_numpy(), "h": h,
-                                  "f": test["p0"].to_numpy() + pred}))
-    df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["market_idx", "origin", "h", "f"])
-    return spec.col, h, df, time.time() - t0, n_fits, 0
+    res = Backtester(table, (str(blocks[0][0].date()), str(blocks[-1][1].date())), h=h, blocks=blocks).run(LGBMModel(spec.p, features, seed, name=spec.col))
+    df = res.frame.rename(columns={"f_log": "f"})[["market_idx", "origin", "h", "f"]]
+    return spec.col, h, df, time.time() - t0, res.n_fits, 0
 
 
 # --------------------------------------------------------------------------- orchestration
