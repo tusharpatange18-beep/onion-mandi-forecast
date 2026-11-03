@@ -414,13 +414,60 @@ python -m pytest -rs                       # tests; those needing local data ski
 **The tuning run must come first:** the interval calibration and the anomaly validation are seeded with the saved forecasts of the tuning
 run (`results/runs/tune_*`, not in git). A new tuning run gets a new run id, so the selection file and everything downstream must be regenerated.
 
-Serving:
+### Run the API and the dashboard
+
+**Before you start:** the dashboard has four tabs. *Backtest*, *Anomalies* and *About* read the committed `results/*.csv`, so they work on a fresh clone.
+The *Forecast* tab also needs two git-ignored files that the pipeline above creates: `results/forecasts.parquet` (`python -m mandi.forecast`) and
+`data/processed/panel.parquet` (`python -m mandi.run_phase1`). Without them that tab shows an error.
+
+Use two terminals, both in the project folder, **with the project's own environment active** (not another project's). Start the API first.
+
+*Linux / macOS*
 
 ```bash
-python -m uvicorn api.main:app --port 8000            # plain uvicorn; needs PYTHONPATH as above
-python -m streamlit run app/dashboard.py               # set MANDI_API_URL if the API is elsewhere
-docker compose up --build                              # alternative; see docs/serving.md
+source .venv/bin/activate
+export PYTHONPATH="src:."
+
+# terminal 1: the API
+python -m uvicorn api.main:app --port 8000
+
+# terminal 2: the dashboard
+export MANDI_API_URL="http://127.0.0.1:8000"
+python -m streamlit run app/dashboard.py
 ```
+
+*Windows (PowerShell)*
+
+```powershell
+$env:PYTHONPATH = "src;."
+$py = "$env:USERPROFILE\.venvs\fada\Scripts\python.exe"      # the environment created in "Reproduce"
+
+# terminal 1: the API
+& $py -m uvicorn api.main:app --port 8000
+
+# terminal 2: the dashboard
+$env:PYTHONPATH = "src;."; $env:MANDI_API_URL = "http://127.0.0.1:8000"
+& $py -m streamlit run app/dashboard.py
+```
+
+Then open:
+
+| URL | What |
+|---|---|
+| http://127.0.0.1:8000/docs | interactive API documentation |
+| http://127.0.0.1:8000/health | health check |
+| http://127.0.0.1:8000/forecast?market=Pune&horizon=30 | one forecast with intervals and caveats |
+| http://localhost:8501 | the dashboard |
+
+Troubleshooting:
+
+- `No module named uvicorn` (or `streamlit`): the wrong Python is active. Use the environment you installed `requirements.txt` into.
+- `404 Not Found` at `http://127.0.0.1:8000/`: expected, the root URL has no page; use `/docs`.
+- The Forecast tab says the API is *not reachable*: the API terminal is not running (keep it open), or `localhost` resolved to IPv6 on Windows; set `MANDI_API_URL` to `http://127.0.0.1:8000` as above.
+- No data yet and you only want to see the API respond: start it on the synthetic test fixture, which is labelled `SYNTHETIC-FIXTURE` in every response:
+  `MANDI_FORECASTS=tests/fixtures/forecasts_fixture.parquet MANDI_RESULTS=tests/fixtures python -m uvicorn api.main:app --port 8000` (on Windows set the two variables with `$env:` first).
+
+Or with Docker (one image, two services): `docker compose up --build`; see `docs/serving.md`.
 
 CI (`.github/workflows/ci.yml`) runs the tests without the data (tests that need it skip and are listed), checks that this README's
 result blocks match `results/*.csv`, and builds the Docker image and checks the API container's health with a synthetic fixture file.
