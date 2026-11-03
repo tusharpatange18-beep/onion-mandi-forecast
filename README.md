@@ -427,9 +427,21 @@ result blocks match `results/*.csv`, and builds the Docker image and checks the 
 
 ## Dashboard
 
-*Screenshots to be added.*
+The Streamlit dashboard reads every number from `results/` or the API.
 
-<!-- Add dashboard screenshots here: Forecast tab, Backtest tab, Anomalies tab. -->
+**Forecast tab:** observed prices, the out-of-sample backtest forecast with its 80% and 95% conformal intervals, the latest forward-looking forecast (as of the last data date, not live), and the anomaly flags:
+
+![Dashboard, Forecast tab](docs/images/dashboard_forecast.png)
+
+**Backtest tab** (2020-2024, headline LightGBM, with the block-bootstrap interval):
+
+![Dashboard, Backtest tab](docs/images/dashboard_backtest.png)
+
+**Anomalies tab:** each detector's false-positive rate and recall on injected synthetic spikes, with its limitations stated:
+
+![Dashboard, Anomalies tab](docs/images/dashboard_anomalies.png)
+
+Run it with the commands in [Reproduce](#reproduce).
 
 ## Repository map
 
