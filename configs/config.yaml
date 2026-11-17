@@ -251,7 +251,21 @@ crops:
     forecast:
       selected_models_file: configs/selected_models_tomato.yaml
       runs_dir: results/tomato/runs
-      event_periods: []             # tomato events: added after the event research, before the final run
+      # Error analysis by the period of the TARGET date (used only in the final run's tables, never for a choice).
+      # Declared before the 2020-2024 final run; only events with a dated source are used.
+      event_periods:
+        - {name: covid_lockdown_2020, group: covid, start: "2020-03-25", end: "2020-05-31"}            # T1 to T2
+        - {name: subsidised_sale_2023, group: intervention, start: "2023-07-14", end: "2023-08-20"}   # T3 to T4
+    eda:
+      events:
+        - {id: T1, date: "2020-03-25", kind: covid, precision: day, label: "National lockdown starts (MHA order of 24 Mar)",
+           source: "https://www.scconline.com/blog/post/2020/03/24/breaking-corona-virus-covid-19-india-is-on-a-lockdown-for-21-days-from-midnight-check-the-list-of-things-restricted-and-allowed/"}
+        - {id: T2, date: "2020-06-01", kind: covid, precision: day, label: "Unlock 1 begins (MHA guidelines of 30 May)",
+           source: "https://www.covidlawlab.org/wp-content/uploads/2020/11/2020-05-30-MHA-Guidelines-to-Fight-COVID-19.pdf"}
+        - {id: T3, date: "2023-07-14", kind: intervention, precision: day, label: "NCCF/NAFED subsidised tomato sale starts (Rs 90/kg, Delhi-NCR); procured from AP, Karnataka, Maharashtra mandis",
+           source: "https://www.foodtechbiz.com/business-updates/nccf-and-nafed-to-sell-tomatoes-at-retail-price-of-rs-50-per-kg-from-15-august"}
+        - {id: T4, date: "2023-08-20", kind: intervention, precision: day, label: "Subsidised price cut to Rs 40/kg (last documented step; end of the scheme not found)",
+           source: "https://krishijagran.com/news/nafed-and-nccf-to-offer-tomatoes-at-rs-40-per-kg-in-retail-starting-august-20/?amp=1"}
 
   potato:
     paths:
@@ -276,4 +290,18 @@ crops:
     forecast:
       selected_models_file: configs/selected_models_potato.yaml
       runs_dir: results/potato/runs
-      event_periods: []             # potato events: added after the event research, before the final run
+      # Error analysis by the period of the TARGET date (used only in the final run's tables, never for a choice).
+      # Declared before the 2020-2024 final run; only events with a dated source are used.
+      event_periods:
+        - {name: covid_lockdown_2020, group: covid, start: "2020-03-25", end: "2020-05-31"}      # P1 to P2
+        - {name: import_window_2020_21, group: trade, start: "2020-10-30", end: "2021-01-31"}   # P3 to P4
+    eda:
+      events:
+        - {id: P1, date: "2020-03-25", kind: covid, precision: day, label: "National lockdown starts (MHA order of 24 Mar)",
+           source: "https://www.scconline.com/blog/post/2020/03/24/breaking-corona-virus-covid-19-india-is-on-a-lockdown-for-21-days-from-midnight-check-the-list-of-things-restricted-and-allowed/"}
+        - {id: P2, date: "2020-06-01", kind: covid, precision: day, label: "Unlock 1 begins (MHA guidelines of 30 May)",
+           source: "https://www.covidlawlab.org/wp-content/uploads/2020/11/2020-05-30-MHA-Guidelines-to-Fight-COVID-19.pdf"}
+        - {id: P3, date: "2020-10-30", kind: trade, precision: day, label: "Potato imports from Bhutan allowed without licence (DGFT notif. 44/2015-2020); duty cut to 10% for 10 lakh t",
+           source: "https://www.eximguru.com/notifications/insertion-of-import-policy-conditions-84679.aspx"}
+        - {id: P4, date: "2021-01-31", kind: trade, precision: day, label: "Import window ends (licence waiver and 10% quota valid up to 31 Jan 2021)",
+           source: "https://www.thehansindia.com/news/national/centre-decides-to-import-10-lakh-tonnes-of-potatoes-to-check-rising-prices-653901"}
