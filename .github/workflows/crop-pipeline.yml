@@ -1,0 +1,90 @@
+name: crop pipeline
+
+# Runs the tomato / potato forecasting pipeline in the cloud (the development laptop blocks pyarrow and statsmodels).
+#
+# How to start it: push a commit whose message contains one or more of these tags:
+#   [pipeline tomato tune]    [pipeline tomato final]    [pipeline potato tune]    [pipeline potato final]
+# For each tag, in the order written, the workflow:
+#   1. downloads the crop's CEDA data (python -m mandi.fetch_ceda),
+#   2. cleans it and builds the daily panel (python -m mandi.run_phase1),
+#   3. runs the tuning run (2017-2019) or the final run (2020-2024) (python -m mandi.run_phase3 tune | final),
+# and then commits the result files (docs/<crop>/, results/<crop>/, and for `tune` configs/selected_models_<crop>.yaml)
+# back to the same branch. Large derived files (parquet, results/<crop>/runs/) stay out of git, as for onion.
+#
+# The `final` run refuses to start unless configs/selected_models_<crop>.yaml is committed (the frozen selection).
+
+on:
+  push:
+
+permissions:
+  contents: write   # needed to commit the results back to the branch
+
+jobs:
+  pipeline:
+    # Only run when the commit message asks for it.
+    if: contains(github.event.head_commit.message, '[pipeline ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install pinned requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Run the steps named in the commit message
+        env:
+          PYTHONPATH: src:.
+          MESSAGE: ${{ github.event.head_commit.message }}   # passed as a variable, never pasted into the script
+        run: |
+          set -euo pipefail
+
+          # All "[pipeline <crop> <step>]" tags in the message, one per line, in the order written.
+          tags=$(printf '%s' "$MESSAGE" | grep -oE '\[pipeline (tomato|potato) (tune|final)\]' || true)
+          if [ -z "$tags" ]; then
+            echo "No valid tag found. Use [pipeline <tomato|potato> <tune|final>]."
+            exit 1
+          fi
+
+          # Run the tags one after the other.
+          echo "$tags" | while read -r tag; do
+            words=$(echo "$tag" | tr -d '[]')              # "pipeline tomato tune"
+            crop=$(echo "$words" | awk '{print $2}')        # "tomato"
+            step=$(echo "$words" | awk '{print $3}')        # "tune"
+            commodity="$(echo "${crop:0:1}" | tr a-z A-Z)${crop:1}"   # "Tomato" (the name CEDA uses)
+            echo "::group::$crop $step"
+
+            python -m mandi.fetch_ceda "$commodity"
+            MANDI_CROP="$crop" python -m mandi.run_phase1
+            MANDI_CROP="$crop" python -m mandi.run_phase3 "$step" --workers 4
+
+            echo "::endgroup::"
+          done
+
+      - name: Commit the result files back to the branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898338+github-actions[bot]@users.noreply.github.com"
+
+          # Add the output folders that exist (docs/<crop>, results/<crop>, the proposed selection files).
+          for crop in tomato potato; do
+            for path in "docs/$crop" "results/$crop" "configs/selected_models_$crop.yaml"; do
+              if [ -e "$path" ]; then
+                git add "$path"
+              fi
+            done
+          done
+
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          # The message has no pipeline tag, so this commit does not start the workflow again.
+          git commit -m "Pipeline results from CI run ${{ github.run_id }} (commit ${GITHUB_SHA::7})"
+          git push origin "HEAD:${{ github.ref_name }}"

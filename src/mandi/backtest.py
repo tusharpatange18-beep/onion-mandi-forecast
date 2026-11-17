@@ -444,7 +444,7 @@ def log_run(kind: str, run_id: str, cfg: dict[str, Any], specs: list[Spec], tab:
         spec_names.append(spec.col)
 
     # Everything we want to remember about this run.
-    meta = {"run_id": run_id, "kind": kind, "git": git_state(), "specs": spec_names, "timings": timings, "config_sha1": config_sha1}
+    meta = {"run_id": run_id, "kind": kind, "git": git_state(cfg["forecast"]["selected_models_file"]), "specs": spec_names, "timings": timings, "config_sha1": config_sha1}
     for key, value in extra.items():
         meta[key] = value
 
@@ -453,7 +453,7 @@ def log_run(kind: str, run_id: str, cfg: dict[str, Any], specs: list[Spec], tab:
     tab.to_parquet(run_folder / "forecasts.parquet", index=False)
 
     # Add one line to the run log (write the header only if the file is new).
-    log_path = ROOT / "results" / "run_log.csv"
+    log_path = ROOT / cfg["paths"]["results"] / "run_log.csv"
     log_row = {
         "run_id": run_id,
         "kind": kind,

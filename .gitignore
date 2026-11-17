@@ -24,3 +24,6 @@ results/anomalies.csv
 
 # the one parquet file allowed in git: synthetic test data for the CI container check
 !tests/fixtures/forecasts_fixture.parquet
+
+# Phase 3 run outputs of the other crops (derived data)
+results/*/runs/

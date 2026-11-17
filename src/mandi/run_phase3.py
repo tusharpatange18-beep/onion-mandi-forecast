@@ -25,7 +25,7 @@ import yaml
 from mandi import backtest as B
 from mandi import evaluate as E
 from mandi import features as F
-from mandi.config import ROOT, load_config
+from mandi.config import ROOT, load_config, results_dir
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def cmd_tune(cfg: dict[str, Any], workers: int) -> None:
     best_val = E.best_model_by_validation(kept, chosen)
     run_id = "tune_" + pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     B.log_run("tune", run_id, cfg, specs, tab, timings, {"window": window, "triples_kept": len(kept), "triples_total": len(tab)})
-    out = ROOT / "results" / "tuning"
+    out = results_dir(cfg) / "tuning"
     out.mkdir(parents=True, exist_ok=True)
     scores.to_csv(out / "tuning_scores.csv", index=False)
     rep.to_csv(out / "tuning_dropped_triples.csv", index=False)
@@ -85,12 +85,12 @@ def _load_selection(cfg: dict[str, Any]) -> dict[str, Any]:
     """The frozen selection. Refuses to run unless it is committed and unchanged and the code is clean."""
     p = _selected_path(cfg)
     if not p.exists():
-        raise SystemExit("configs/selected_models.yaml not found: run `tune` first")
+        raise SystemExit(f"{p.relative_to(ROOT)} not found: run `tune` first")
     rel = str(p.relative_to(ROOT))
     tracked = subprocess.run(["git", "ls-files", "--error-unmatch", rel], cwd=ROOT, capture_output=True, text=True).returncode == 0
     dirty_sel = bool(subprocess.run(["git", "status", "--porcelain", rel], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     if not tracked or dirty_sel:
-        raise SystemExit("configs/selected_models.yaml must be committed (and unchanged) before the final run")
+        raise SystemExit(f"{rel} must be committed (and unchanged) before the final run")
     if B.git_state()["dirty"]:
         raise SystemExit("src/, configs/, tests/ or project.md have uncommitted changes: commit them so the run log is dirty=False")
     return yaml.safe_load(p.read_text(encoding="utf-8"))
@@ -142,7 +142,8 @@ def cmd_analyse(cfg: dict[str, Any], run_id: str, prefix: str) -> None:
                ("robustness", E.robustness_table(kept, summ)), ("error_analysis", seg), ("runtime", runtime), ("dropped_triples", rep)]
     if not prefix:
         outputs.append(("sensitivity_stale", E.stale_sensitivity(kept, scales, headline, per_cell)))
-    res = ROOT / "results"
+    res = results_dir(cfg)
+    res.mkdir(parents=True, exist_ok=True)
     for name, df in outputs:
         df.to_csv(res / f"{prefix}{name}.csv", index=False)
     kept.to_parquet(res / f"{prefix}fair_forecasts.parquet", index=False)
@@ -159,7 +160,7 @@ def cmd_ablation(cfg: dict[str, Any], workers: int) -> None:
     chosen = {int(h): d for h, d in sel["chosen"].items()}
     groups = cfg["forecast"]["ablation_groups"]
     all_specs = {s.col: s for s in B.specs_from_config(cfg)}
-    fair = pd.read_parquet(ROOT / "results" / "fair_forecasts.parquet")
+    fair = pd.read_parquet(results_dir(cfg) / "fair_forecasts.parquet")
     _, arrays, tables, _ = _inputs(cfg)
     window = (cfg["backtest"]["first_test_date"], cfg["backtest"]["last_test_date"])
     keys = ["market_idx", "origin", "h"]
@@ -186,7 +187,7 @@ def cmd_ablation(cfg: dict[str, Any], workers: int) -> None:
                          "change_vs_full_pct": 100 * (mae - full_mae) / full_mae, "strongest_baseline": bl,
                          "impr_vs_strongest_pct": 100 * (bmae - mae) / bmae})
     abl = pd.DataFrame(rows)
-    abl.to_csv(ROOT / "results" / "ablation_lgbm.csv", index=False)
+    abl.to_csv(results_dir(cfg) / "ablation_lgbm.csv", index=False)
     run_id = "ablation_" + pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     timings = {"wall_seconds": round(sum(t["wall_seconds"] for t in all_timings.values()), 1),
                "per_model": {k: v for t in all_timings.values() for k, v in t["per_model"].items()}}

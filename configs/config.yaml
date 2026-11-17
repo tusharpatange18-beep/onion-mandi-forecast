@@ -218,3 +218,62 @@ serving:
     port: 8501
     history_days: 365
     request_timeout_seconds: 5
+
+# ---------------------------------------------------------------------------------------------------------------
+# Other crops. Everything above is the onion setup. Each crop below lists ONLY the settings that differ from onion;
+# all other settings (cleaning rules, backtest dates, models, ...) are the same. Choose a crop with the environment
+# variable MANDI_CROP (e.g. MANDI_CROP=tomato); without it, onion is used exactly as written above.
+#
+# Data: CEDA Agri Market Data (Ashoka University), compiled from Agmarknet; downloaded by `python -m mandi.fetch_ceda`.
+# These are DISTRICT series (average of the markets in the district that reported that day), not single markets.
+# Districts per crop were chosen from the 2014-2024 data-quality report (see src/mandi/fetch_ceda.py).
+crops:
+  tomato:
+    paths:
+      raw_dir: data/raw/ceda
+      interim: data/interim/tomato
+      processed: data/processed/tomato
+      panel: data/processed/tomato/panel.parquet
+      results: results/tomato
+      docs: docs/tomato
+    data:
+      source: ceda
+      commodity: Tomato
+      calendar_columns: []          # the festival/crop-season flags come from the onion file; not used for CEDA crops
+    markets:
+      - Maharashtra_Pune_Pune district
+      - Maharashtra_Solapur_Solapur district
+      - Maharashtra_Kolhapur_Kolhapur district
+      - Maharashtra_Aurangabad_Aurangabad district
+    corrections: []                 # none approved yet (onion's list belongs to onion markets)
+    ranking:
+      always_show: []
+    forecast:
+      selected_models_file: configs/selected_models_tomato.yaml
+      runs_dir: results/tomato/runs
+      event_periods: []             # tomato events: added after the event research, before the final run
+
+  potato:
+    paths:
+      raw_dir: data/raw/ceda
+      interim: data/interim/potato
+      processed: data/processed/potato
+      panel: data/processed/potato/panel.parquet
+      results: results/potato
+      docs: docs/potato
+    data:
+      source: ceda
+      commodity: Potato
+      calendar_columns: []
+    markets:
+      - Maharashtra_Pune_Pune district
+      - Maharashtra_Solapur_Solapur district
+      - Maharashtra_Aurangabad_Aurangabad district
+      - Maharashtra_Mumbai_Mumbai district
+    corrections: []
+    ranking:
+      always_show: []
+    forecast:
+      selected_models_file: configs/selected_models_potato.yaml
+      runs_dir: results/potato/runs
+      event_periods: []             # potato events: added after the event research, before the final run

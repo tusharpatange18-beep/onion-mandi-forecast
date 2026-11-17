@@ -13,7 +13,8 @@ Note: these are DISTRICT values (several markets together), not single-market va
 Usage:
     python -m mandi.fetch_ceda Tomato Potato
 
-One CSV file per (commodity, district) is written to data/raw/ceda/ (not in git, like the onion file).
+One CSV file per (commodity, district) is written to the folder in the config (paths.raw_dir = data/raw/ceda/, not in git).
+The districts per crop are also read from the config.
 """
 from __future__ import annotations
 
@@ -26,7 +27,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from mandi.config import ROOT
+from mandi import ingest
+from mandi.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +45,15 @@ DISTRICT_IDS = {
     "Aurangabad": 515,  # Chhatrapati Sambhajinagar (renamed in 2023; Census 2011 name is Aurangabad)
     "Mumbai": 519,  # includes the Vashi (New Mumbai) APMC, which Agmarknet lists under Mumbai
 }
-# Districts used per crop (chosen from the data-quality report of 2014-2024):
+# Which districts each crop uses is set in configs/config.yaml (crops -> <crop> -> markets), chosen from the
+# data-quality report of 2014-2024:
 # * tomato leaves out Mumbai (only 2-12 days with a price per year in 2015-2019);
 # * potato leaves out Kolhapur (25% of days covered, no data from mid-2018 to mid-2021).
 # Thane and Mumbai Suburban were checked too and left out (patchy / empty).
-CROP_DISTRICTS = {
-    "Tomato": ["Pune", "Solapur", "Kolhapur", "Aurangabad"],
-    "Potato": ["Pune", "Solapur", "Aurangabad", "Mumbai"],
-}
 MAX_ATTEMPTS = 5  # tries per request before giving up
 PAUSE_SECONDS = 1.0  # pause between requests, to be polite to the server
 FIELDS = ["date", "commodity", "state", "district", "district_id",
           "price_min", "price_max", "price_modal", "arrivals_tonnes"]
-OUT_DIR = ROOT / "data" / "raw" / "ceda"
 
 
 def post_json(path: str, body: dict) -> dict:
@@ -146,13 +144,15 @@ def main() -> None:
         commodities = ["Tomato", "Potato"]
 
     for commodity in commodities:
-        for district in CROP_DISTRICTS[commodity]:
-            file_name = f"{commodity.lower()}_{district.replace(' ', '_')}.csv"
-            path = OUT_DIR / file_name
+        # The crop's settings say which districts to use and where the files go.
+        cfg = load_config(crop=commodity)
+        for market_key in cfg["markets"]:
+            district = ingest.district_of(market_key)
+            path = ingest.ceda_file(cfg, district)
 
             # Skip files that were downloaded before.
             if path.exists():
-                logger.info("%s %s: already downloaded, skipping (%s)", commodity, district, file_name)
+                logger.info("%s %s: already downloaded, skipping (%s)", commodity, district, path.name)
                 continue
 
             rows = fetch_district(commodity, district)
