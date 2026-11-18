@@ -8,6 +8,7 @@ which uses data up to that origin only.
 from __future__ import annotations
 
 import logging
+import os
 import warnings
 from typing import Any
 
@@ -164,6 +165,18 @@ def prophet_forecast(y_train: pd.Series, target_dates: pd.DatetimeIndex, spec: d
 
 
 # --------------------------------------------------------------------------- LightGBM
+def lgbm_threads() -> int:
+    """Threads per LightGBM fit: 4 (the setting used for the onion results) unless MANDI_LGBM_THREADS says otherwise.
+
+    The cloud pipeline runs 4 worker processes on a 4-core machine. With 4 threads each, 16 threads fight over 4 cores
+    and LightGBM becomes about 30 times slower, so the crop workflow sets MANDI_LGBM_THREADS=1.
+    """
+    text = os.environ.get("MANDI_LGBM_THREADS", "")
+    if text == "":
+        return 4  # default: unchanged from the onion runs
+    return int(text)
+
+
 def lgbm_fit_predict(train: pd.DataFrame, test: pd.DataFrame, features: list[str], params: dict[str, Any], seed: int) -> np.ndarray:
     """Train on (features -> log change) and predict the log change for `test`. Missing feature values stay NaN."""
     import lightgbm as lgb
@@ -181,7 +194,7 @@ def lgbm_fit_predict(train: pd.DataFrame, test: pd.DataFrame, features: list[str
         "seed": seed,
         "deterministic": True,     # same result every run
         "force_row_wise": True,
-        "num_threads": 4,
+        "num_threads": lgbm_threads(),
         "verbose": -1,             # no log output
     }
     # The Huber loss needs its alpha parameter.

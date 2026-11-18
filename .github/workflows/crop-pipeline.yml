@@ -134,6 +134,7 @@ jobs:
       - name: Clean and run
         env:
           PYTHONPATH: src:.
+          MANDI_LGBM_THREADS: "1"   # 4 workers x 1 thread = 4 cores; 4 threads each made LightGBM ~30x slower
           CROP: ${{ matrix.task.crop }}
           STEP: ${{ matrix.task.step }}
         run: |
