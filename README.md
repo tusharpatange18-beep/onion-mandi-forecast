@@ -471,6 +471,20 @@ python -m pytest -rs                       # tests; those needing local data ski
 **The tuning run must come first:** the interval calibration and the anomaly validation are seeded with the saved forecasts of the tuning
 run (`results/runs/tune_*`, not in git). A new tuning run gets a new run id, so the selection file and everything downstream must be regenerated.
 
+**Tomato and potato** (core forecasting only). The data comes from CEDA (no key needed); every step reads the crop from `MANDI_CROP`:
+
+```bash
+python -m mandi.fetch_ceda Tomato Potato              # CEDA district CSVs -> data/raw/ceda/
+export MANDI_CROP=tomato                              # or potato   (PowerShell: $env:MANDI_CROP = "tomato")
+python -m mandi.run_phase1                            # clean -> docs/tomato/cleaning_log.md
+python -m mandi.run_phase3 tune                       # 2017-2019 -> configs/selected_models_tomato.yaml
+git add configs/selected_models_tomato.yaml && git commit -m "freeze tomato selection"
+python -m mandi.run_phase3 final                      # 2020-2024 -> results/tomato/
+```
+
+In the cloud: push a commit whose message contains `[pipeline tomato tune]`, `[pipeline potato final]` and so on; see
+`.github/workflows/crop-pipeline.yml`. Running 4 workers on a 4-core machine? Set `MANDI_LGBM_THREADS=1` (the workflow does).
+
 ### Run the API and the dashboard
 
 **Before you start:** the dashboard has four tabs. *Backtest*, *Anomalies* and *About* read the committed `results/*.csv`, so they work on a fresh clone.

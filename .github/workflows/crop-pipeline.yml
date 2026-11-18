@@ -6,7 +6,8 @@ name: crop pipeline
 #   [pipeline tomato tune]    [pipeline tomato final]    [pipeline potato tune]    [pipeline potato final]
 # Each tag runs as its own job on its own machine, all at the same time (so two crops take as long as one).
 # Each job:
-#   1. downloads the crop's CEDA data (python -m mandi.fetch_ceda),
+#   1. gets the crop's CEDA data: from the GitHub Actions cache, else from the private backup repository
+#      (secret CEDA_DATA_TOKEN), else downloads it from the CEDA site (python -m mandi.fetch_ceda),
 #   2. cleans it and builds the daily panel (python -m mandi.run_phase1),
 #   3. runs the tuning run (2017-2019) or the final run (2020-2024) (python -m mandi.run_phase3 tune | final),
 #   4. commits the result files (docs/<crop>/, results/<crop>/, and for `tune` configs/selected_models_<crop>.yaml)
