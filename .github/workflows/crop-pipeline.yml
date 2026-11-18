@@ -78,15 +78,39 @@ jobs:
       - name: Install pinned requirements
         run: python -m pip install -r requirements.txt
 
-      - name: Download, clean, and run
+      # Reuse the CEDA files from an earlier run, so a run does not depend on the CEDA website being up.
+      # The cache is private to this repository's workflows; the raw data is never committed.
+      - name: Restore the downloaded CEDA files
+        id: ceda_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw/ceda
+          key: ceda-${{ matrix.task.crop }}-v1
+
+      - name: Download from CEDA (skips files that are already there)
+        env:
+          PYTHONPATH: src:.
+          CROP: ${{ matrix.task.crop }}
+        run: |
+          set -euo pipefail
+          commodity="$(echo "${CROP:0:1}" | tr a-z A-Z)${CROP:1}"   # "Tomato" (the name CEDA uses)
+          python -m mandi.fetch_ceda "$commodity"
+
+      # Save right after the download (not at the end of the job), so the files are kept even if a later step fails.
+      - name: Save the CEDA files for later runs
+        if: steps.ceda_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw/ceda
+          key: ceda-${{ matrix.task.crop }}-v1
+
+      - name: Clean and run
         env:
           PYTHONPATH: src:.
           CROP: ${{ matrix.task.crop }}
           STEP: ${{ matrix.task.step }}
         run: |
           set -euo pipefail
-          commodity="$(echo "${CROP:0:1}" | tr a-z A-Z)${CROP:1}"   # "Tomato" (the name CEDA uses)
-          python -m mandi.fetch_ceda "$commodity"
           MANDI_CROP="$CROP" python -m mandi.run_phase1
           MANDI_CROP="$CROP" python -m mandi.run_phase3 "$STEP" --workers 4
 
