@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import multiprocessing
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -256,6 +257,18 @@ def build_tables(arrays: F.Arrays, closure: dict[str, int | None], cfg: dict[str
     return tables
 
 
+def make_pool(workers: int) -> ProcessPoolExecutor:
+    """A pool of worker processes started with 'spawn' (a fresh Python per worker) on every system.
+
+    Windows always uses 'spawn', and the onion results were made that way. Linux uses 'fork' by default, which copies
+    the main process including its background threads (pyarrow starts some when it reads the panel); a forked worker
+    can then wait forever on a lock that no thread will release. That is what stopped the tomato/potato tuning on
+    GitHub Actions for 5 hours. 'spawn' avoids it and gives the same results as on Windows.
+    """
+    spawn_context = multiprocessing.get_context("spawn")  # same start method on Windows, Linux and macOS
+    return ProcessPoolExecutor(max_workers=workers, mp_context=spawn_context)
+
+
 def run_backtest(arrays: F.Arrays, tables: dict[int, pd.DataFrame], specs: list[Spec], window: tuple[str, str],
                  cfg: dict[str, Any], workers: int = 12) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Run all `specs` over origins in `window` and return (triple table with one log-forecast column per model, timings).
@@ -288,12 +301,16 @@ def run_backtest(arrays: F.Arrays, tables: dict[int, pd.DataFrame], specs: list[
     # Run the jobs in parallel processes and collect the results in job order.
     start_time = time.time()
     results = []
-    with ProcessPoolExecutor(max_workers=workers) as executor:
+    with make_pool(workers) as executor:
         futures = []
         for function, arguments in jobs:
             futures.append(executor.submit(function, arguments))
+        done = 0
         for future in futures:
             results.append(future.result())
+            done += 1
+            # One progress line per finished job, so a slow or stuck run is visible in the log.
+            logger.info("backtest: %d of %d jobs done (%.0f s)", done, len(futures), time.time() - start_time)
     wall_seconds = time.time() - start_time
 
     # The triples to score: origins inside the window whose target exists, for every horizon.
