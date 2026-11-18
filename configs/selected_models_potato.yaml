@@ -41,3 +41,10 @@ best_model_by_validation:
 - market: Solapur district
   h: 30
   model: lgbm
+
+# Headline model (fixed before the 2020-2024 period was run): at each horizon, the family with the best pooled tuning score
+# (lowest mean log-MAE on the 2017-2019 folds, equal weight per market), using the frozen configurations in `chosen`.
+# The per-market choices in `best_model_by_validation` are a secondary 'per-cell tuning-selected' row, not the headline.
+headline_model_by_horizon:
+  7: lgbm
+  30: sarima
