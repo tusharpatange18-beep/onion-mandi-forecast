@@ -33,7 +33,7 @@ intervals that are right on average but too narrow when a shock starts. Those ar
 
 > The dataset ends 2024-12-31, so the served "latest" forecasts are as of the last data date, **not live**.
 
-**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) · [Tail risk and trading-style evaluation](#tail-risk-and-a-trading-style-evaluation) ·
+**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) · [Tomato and potato](#tomato-and-potato-district-averages) · [Tail risk and trading-style evaluation](#tail-risk-and-a-trading-style-evaluation) ·
 [Error analysis](#error-analysis) · [Anomaly detection](#anomaly-detection) · [Limitations and next steps](#limitations-and-next-steps) ·
 [Reproduce](#reproduce) · [Dashboard](#dashboard) · [Repository map](#repository-map) · [Licence and credits](#licence-and-credits)
 
@@ -69,6 +69,9 @@ Why it is hard:
   - **one variety per market** (its most frequent), never mixed with other varieties.
 - Cleaning decisions (one variety per market, six reviewed outlier quotes set to missing, nothing imputed in the target) are logged in
   `docs/cleaning_log.md`.
+- **Tomato and potato** use a second source: daily **district averages** from **CEDA Agri Market Data** (Centre for Economic Data and
+  Analysis, Ashoka University, https://agmarknet.ceda.ashoka.edu.in), also compiled from Agmarknet. See
+  [Tomato and potato](#tomato-and-potato-district-averages) and [DATA.md](DATA.md).
 
 ## Architecture
 
@@ -186,6 +189,35 @@ Rolling split-conformal intervals, 2020-2024 (macro over markets; block-bootstra
 ![Calibration of the prediction intervals](results/figures/interval_calibration.png)
 
 ![30-day forecasts with intervals in a normal period and two export-ban periods](results/figures/interval_fan_charts.png)
+
+## Tomato and potato (district averages)
+
+The same forecasting pipeline was run for tomato and potato: the same cleaning rules, candidate models, 2017-2019 tuning folds,
+selection rule (frozen and committed before the test run) and 2020-2024 rolling-origin test. Pick the crop with `MANDI_CROP=tomato`
+or `MANDI_CROP=potato`; outputs are in `results/<crop>/` and `docs/<crop>/`, and the frozen choices in `configs/selected_models_<crop>.yaml`.
+
+**The data is not the same kind as onion's.** Onion uses **single markets** (one mandi, one variety). Tomato and potato use
+**district averages** from CEDA (Ashoka University): each day's price is the average over the markets in the district that reported
+that day, across varieties. Averages are smoother than single-market quotes, so the crops below are not a like-for-like test of which
+crop is easier to forecast.
+
+2020-2024 test, improvement in rupee MAE (positive = better), equal-weight average over markets:
+
+| crop | markets | headline model (7 / 30 days) | vs strongest baseline, 7 days | vs strongest baseline, 30 days | vs naive, 7 days | vs naive, 30 days | headline MAE, Rs/quintal (7 / 30 days) | markets with a significant gain (7 / 30 days) |
+|---|---|---|---|---|---|---|---|---|
+| onion | 5 single mandis | LightGBM / LightGBM | +2.7% | +7.7% | +3.0% | +7.9% | 219 / 424 | 1 of 5 / 1 of 5 |
+| tomato | 4 districts: Pune, Solapur, Kolhapur, Aurangabad | LightGBM / LightGBM | +6.9% | +9.8% | +7.3% | +10.3% | 371 / 784 | 3 of 4 / 0 of 4 |
+| potato | 4 districts: Pune, Solapur, Aurangabad, Mumbai | LightGBM / SARIMA | +7.1% | -0.4% | +10.3% | +4.0% | 129 / 236 | 3 of 4 / 0 of 4 |
+
+- "Significant gain": Diebold-Mariano test of the headline against the strongest baseline in that market, p < 0.05 (approximate,
+  because forecast horizons overlap). No bootstrap interval was computed for tomato and potato.
+- **Potato at 30 days:** in tuning, SARIMA, ETS and LightGBM were within 0.001 log-MAE of each other; the rule picked SARIMA, which
+  ties the baselines in the test (-0.4%). LightGBM would have scored +8.2%, but that is a hindsight number and is not the headline.
+- Kolhapur is left out for potato and Mumbai for tomato (too many missing days); see `docs/<crop>/market_coverage.md`.
+- Prediction intervals, anomaly detection, the trading-style test and the dashboard are onion-only.
+- Data: CEDA Agri Market Data, Centre for Economic Data and Analysis, Ashoka University (https://agmarknet.ceda.ashoka.edu.in), compiled
+  from Agmarknet. Please cite CEDA when using these numbers. The raw files are not in this repository; `python -m mandi.fetch_ceda Tomato Potato`
+  downloads them.
 
 ## Tail risk and a trading-style evaluation
 
@@ -532,5 +564,6 @@ Run it with the commands in [Reproduce](#reproduce).
 ## Licence and credits
 
 Code: MIT ([LICENSE](LICENSE)). Data: CC BY 4.0, by Shelar, Hajare and Mangarule (Mendeley Data, DOI 10.17632/ds9jmxp9zy.1), from Agmarknet
-(Directorate of Marketing and Inspection) and IMD; see [DATA.md](DATA.md). The data and all row-level derived data are kept out of this
-repository.
+(Directorate of Marketing and Inspection) and IMD; see [DATA.md](DATA.md). Tomato and potato data: CEDA Agri Market Data, Centre for
+Economic Data and Analysis, Ashoka University (https://agmarknet.ceda.ashoka.edu.in), compiled from Agmarknet. The data and all row-level
+derived data are kept out of this repository.
