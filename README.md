@@ -33,7 +33,7 @@ intervals that are right on average but too narrow when a shock starts. Those ar
 
 > The dataset ends 2024-12-31, so the served "latest" forecasts are as of the last data date, **not live**.
 
-**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) · [Tail risk and trading-style evaluation](#tail-risk-and-a-trading-style-evaluation) ·
+**Contents:** [Problem](#problem) · [Data](#data) · [Architecture](#architecture) · [Evaluation protocol](#evaluation-protocol) · [Results](#results) · [Tomato and potato](#tomato-and-potato-district-averages) · [Tail risk and trading-style evaluation](#tail-risk-and-a-trading-style-evaluation) ·
 [Error analysis](#error-analysis) · [Anomaly detection](#anomaly-detection) · [Limitations and next steps](#limitations-and-next-steps) ·
 [Reproduce](#reproduce) · [Dashboard](#dashboard) · [Repository map](#repository-map) · [Licence and credits](#licence-and-credits)
 
@@ -69,6 +69,9 @@ Why it is hard:
   - **one variety per market** (its most frequent), never mixed with other varieties.
 - Cleaning decisions (one variety per market, six reviewed outlier quotes set to missing, nothing imputed in the target) are logged in
   `docs/cleaning_log.md`.
+- **Tomato and potato** use a second source: daily **district averages** from **CEDA Agri Market Data** (Centre for Economic Data and
+  Analysis, Ashoka University, https://agmarknet.ceda.ashoka.edu.in), also compiled from Agmarknet. See
+  [Tomato and potato](#tomato-and-potato-district-averages) and [DATA.md](DATA.md).
 
 ## Architecture
 
@@ -187,6 +190,35 @@ Rolling split-conformal intervals, 2020-2024 (macro over markets; block-bootstra
 
 ![30-day forecasts with intervals in a normal period and two export-ban periods](results/figures/interval_fan_charts.png)
 
+## Tomato and potato (district averages)
+
+The same forecasting pipeline was run for tomato and potato: the same cleaning rules, candidate models, 2017-2019 tuning folds,
+selection rule (frozen and committed before the test run) and 2020-2024 rolling-origin test. Pick the crop with `MANDI_CROP=tomato`
+or `MANDI_CROP=potato`; outputs are in `results/<crop>/` and `docs/<crop>/`, and the frozen choices in `configs/selected_models_<crop>.yaml`.
+
+**The data is not the same kind as onion's.** Onion uses **single markets** (one mandi, one variety). Tomato and potato use
+**district averages** from CEDA (Ashoka University): each day's price is the average over the markets in the district that reported
+that day, across varieties. Averages are smoother than single-market quotes, so the crops below are not a like-for-like test of which
+crop is easier to forecast.
+
+2020-2024 test, improvement in rupee MAE (positive = better), equal-weight average over markets:
+
+| crop | markets | headline model (7 / 30 days) | vs strongest baseline, 7 days | vs strongest baseline, 30 days | vs naive, 7 days | vs naive, 30 days | headline MAE, Rs/quintal (7 / 30 days) | markets with a significant gain (7 / 30 days) |
+|---|---|---|---|---|---|---|---|---|
+| onion | 5 single mandis | LightGBM / LightGBM | +2.7% | +7.7% | +3.0% | +7.9% | 219 / 424 | 1 of 5 / 1 of 5 |
+| tomato | 4 districts: Pune, Solapur, Kolhapur, Aurangabad | LightGBM / LightGBM | +6.9% | +9.8% | +7.3% | +10.3% | 371 / 784 | 3 of 4 / 0 of 4 |
+| potato | 4 districts: Pune, Solapur, Aurangabad, Mumbai | LightGBM / SARIMA | +7.1% | -0.4% | +10.3% | +4.0% | 129 / 236 | 3 of 4 / 0 of 4 |
+
+- "Significant gain": Diebold-Mariano test of the headline against the strongest baseline in that market, p < 0.05 (approximate,
+  because forecast horizons overlap). No bootstrap interval was computed for tomato and potato.
+- **Potato at 30 days:** in tuning, SARIMA, ETS and LightGBM were within 0.001 log-MAE of each other; the rule picked SARIMA, which
+  ties the baselines in the test (-0.4%). LightGBM would have scored +8.2%, but that is a hindsight number and is not the headline.
+- Kolhapur is left out for potato and Mumbai for tomato (too many missing days); see `docs/<crop>/market_coverage.md`.
+- Prediction intervals, anomaly detection, the trading-style test and the dashboard are onion-only.
+- Data: CEDA Agri Market Data, Centre for Economic Data and Analysis, Ashoka University (https://agmarknet.ceda.ashoka.edu.in), compiled
+  from Agmarknet. Please cite CEDA when using these numbers. The raw files are not in this repository; `python -m mandi.fetch_ceda Tomato Potato`
+  downloads them.
+
 ## Tail risk and a trading-style evaluation
 
 **Backtesting framework.** The evaluation loop is one reusable interface in [`src/mandi/framework.py`](src/mandi/framework.py): a `Model` base class
@@ -250,6 +282,31 @@ How to read it, and why not to over-read it:
   reflects that a few large price moves are forecast in direction, not that prices are easy to predict. Year-by-year P&L is in `results/trading_by_year.csv`; it is positive every year, including 2021, the year the MAE loses.
 - Only trades whose target-date quote exists are scored (as in every table here); a real exit would need the nearest quote, so this flatters the result slightly. Quotes are modal prices with reporting lags.
 - One test path, five correlated markets, no market impact and no storage, transport or spoilage costs. This is **not** evidence of a profitable strategy.
+
+**Four caveats, each measured.** The headline numbers above are the optimistic case. The table below re-scores the same trades four ways
+(`results/trading_robustness.csv`, produced by `python -m mandi.report_risk`):
+
+1. **No execution lag.** The headline trades at the quote of the day the signal is computed, which nobody can do with a reported modal price.
+   The table re-enters at the market's next quote (usually one or two days later), keeping the same signal and exit. **At 7 days this cuts the P&L roughly in half and the win rate
+   falls below 50%; the 7-day trading result is therefore fragile. At 30 days it makes no material difference.**
+2. **Simple-return inflation.** Trade returns are simple percentage changes, so large up-moves count for more than equal down-moves, and a sum of simple returns exceeds the sum of log
+   returns (the table shows both). The headline P&L uses simple returns at fixed notional.
+3. **Open-trade losses are not counted.** P&L and drawdown are booked when a trade exits, so a position that fell sharply and recovered shows no loss. The table reports the
+   worst unrealised loss inside each trade (lowest observed quote after entry, against the entry price); the drawdown figures above understate the real path risk.
+4. **Profit concentration.** A few large price spikes carry a sizeable share of the profit. The table gives the share from the best 5% of trades and the P&L left without them.
+
+<!-- BEGIN GENERATED: trading_robustness -->
+Checks on the headline long/flat result (LightGBM, threshold 3%, 2020-2024; P&L in % of starting capital):
+
+| h | headline P&L / win rate / Sharpe | 1. entering at the next quote instead | 2. sum of simple vs log returns | 3. median / worst unrealised loss inside a trade | 3. trades that dipped more than 10% below entry | 4. share of P&L from the best 5% of trades | 4. P&L without those trades |
+|---|---|---|---|---|---|---|---|
+| 7 | +879% / 55% / 3.55 | +420% / 45% / 1.95 | +879% vs +661% | -3% / -59% | 25% | 41% (32 trades) | +518% |
+| 30 | +818% / 63% / 2.66 | +825% / 63% / 2.72 | +818% vs +547% | -9% / -64% | 42% | 32% (9 trades) | +555% |
+<!-- END GENERATED: trading_robustness -->
+
+In short: a one-quote entry lag roughly halves the 7-day P&L (the Sharpe stays positive but is much lower) and leaves the 30-day P&L unchanged; without the best 5% of trades both
+stay positive; but simple returns flatter the totals, and many trades sit well below their entry price before they recover (about four in ten at 30 days dipped more than 10%).
+Read the headline Sharpe with that in mind.
 
 ## Error analysis
 
@@ -507,5 +564,6 @@ Run it with the commands in [Reproduce](#reproduce).
 ## Licence and credits
 
 Code: MIT ([LICENSE](LICENSE)). Data: CC BY 4.0, by Shelar, Hajare and Mangarule (Mendeley Data, DOI 10.17632/ds9jmxp9zy.1), from Agmarknet
-(Directorate of Marketing and Inspection) and IMD; see [DATA.md](DATA.md). The data and all row-level derived data are kept out of this
-repository.
+(Directorate of Marketing and Inspection) and IMD; see [DATA.md](DATA.md). Tomato and potato data: CEDA Agri Market Data, Centre for
+Economic Data and Analysis, Ashoka University (https://agmarknet.ceda.ashoka.edu.in), compiled from Agmarknet. The data and all row-level
+derived data are kept out of this repository.

@@ -1,0 +1,12 @@
+column,cannot_forecast,total_triples,dropped_for_all_models_total
+base_naive,0,11438,153
+base_mean3,0,11438,153
+base_seasonal,153,11438,153
+ets|damped_trend,0,11438,153
+ets|local_level,0,11438,153
+lgbm|l1_nl8_mc20_n150,0,11438,153
+lgbm|l1_nl8_mc60_n150,0,11438,153
+prophet_anchored|cps0.05,0,11438,153
+prophet|cps0.05,0,11438,153
+prophet|cps0.3,0,11438,153
+sarima|111_s7,0,11438,153

@@ -1,0 +1,180 @@
+name: crop pipeline
+
+# Runs the tomato / potato forecasting pipeline in the cloud (the development laptop blocks pyarrow and statsmodels).
+#
+# How to start it: push a commit whose message contains one or more of these tags:
+#   [pipeline tomato tune]    [pipeline tomato final]    [pipeline potato tune]    [pipeline potato final]
+# Each tag runs as its own job on its own machine, all at the same time (so two crops take as long as one).
+# Each job:
+#   1. downloads the crop's CEDA data (python -m mandi.fetch_ceda),
+#   2. cleans it and builds the daily panel (python -m mandi.run_phase1),
+#   3. runs the tuning run (2017-2019) or the final run (2020-2024) (python -m mandi.run_phase3 tune | final),
+#   4. commits the result files (docs/<crop>/, results/<crop>/, and for `tune` configs/selected_models_<crop>.yaml)
+#      back to the same branch. Large derived files (parquet, results/<crop>/runs/) stay out of git, as for onion.
+#
+# The `final` run refuses to start unless configs/selected_models_<crop>.yaml is committed (the frozen selection).
+
+on:
+  push:
+
+permissions:
+  contents: write   # needed to commit the results back to the branch
+
+jobs:
+  # Job 1: read the tags in the commit message and turn them into a list of (crop, step) pairs.
+  plan:
+    if: contains(github.event.head_commit.message, '[pipeline ')
+    runs-on: ubuntu-latest
+    outputs:
+      tasks: ${{ steps.tags.outputs.tasks }}
+    steps:
+      - id: tags
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}   # passed as a variable, never pasted into the script
+        run: |
+          set -euo pipefail
+
+          # All "[pipeline <crop> <step>]" tags in the message, one per line.
+          tags=$(printf '%s' "$MESSAGE" | grep -oE '\[pipeline (tomato|potato) (tune|final)\]' || true)
+          if [ -z "$tags" ]; then
+            echo "No valid tag found. Use [pipeline <tomato|potato> <tune|final>]."
+            exit 1
+          fi
+
+          # Build a JSON list like [{"crop":"tomato","step":"tune"},{"crop":"potato","step":"tune"}].
+          tasks="["
+          while read -r tag; do
+            crop=$(echo "$tag" | tr -d '[]' | awk '{print $2}')   # "tomato"
+            step=$(echo "$tag" | tr -d '[]' | awk '{print $3}')   # "tune"
+            if [ "$tasks" != "[" ]; then
+              tasks="$tasks,"
+            fi
+            tasks="$tasks{\"crop\":\"$crop\",\"step\":\"$step\"}"
+          done <<< "$tags"
+          tasks="$tasks]"
+
+          echo "Tasks: $tasks"
+          echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
+
+  # Job 2: one machine per (crop, step), all running at the same time.
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false   # one crop failing does not stop the other
+      matrix:
+        task: ${{ fromJSON(needs.plan.outputs.tasks) }}
+    name: ${{ matrix.task.crop }} ${{ matrix.task.step }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install pinned requirements
+        run: python -m pip install -r requirements.txt
+
+      # Reuse the CEDA files from an earlier run, so a run does not depend on the CEDA website being up.
+      # The cache is private to this repository's workflows; the raw data is never committed.
+      - name: Restore the downloaded CEDA files
+        id: ceda_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw/ceda
+          key: ceda-${{ matrix.task.crop }}-v1
+
+      # Backup copy of the CEDA files in a PRIVATE repository (raw data is never put in this public repository).
+      # Needs the secret CEDA_DATA_TOKEN: a token that can read that repository. Without the secret this step does nothing.
+      - name: Copy CEDA files from the private data repository
+        env:
+          DATA_TOKEN: ${{ secrets.CEDA_DATA_TOKEN }}
+          DATA_REPO: tusharpatange18-beep/mandi-ceda-data
+          CROP: ${{ matrix.task.crop }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATA_TOKEN" ]; then
+            echo "No CEDA_DATA_TOKEN secret: skipping the private copy."
+            exit 0
+          fi
+          git clone --quiet --depth 1 "https://x-access-token:${DATA_TOKEN}@github.com/${DATA_REPO}.git" /tmp/ceda-data
+          mkdir -p data/raw/ceda
+          # Copy this crop's files, but keep any file that is already there (from the cache).
+          for file in /tmp/ceda-data/"$CROP"_*.csv; do
+            if [ ! -e "$file" ]; then
+              continue   # no file for this crop in the private repository
+            fi
+            name=$(basename "$file")
+            if [ ! -e "data/raw/ceda/$name" ]; then
+              cp "$file" "data/raw/ceda/$name"
+              echo "Copied $name"
+            fi
+          done
+
+      - name: Download from CEDA (skips files that are already there)
+        env:
+          PYTHONPATH: src:.
+          CROP: ${{ matrix.task.crop }}
+        run: |
+          set -euo pipefail
+          commodity="$(echo "${CROP:0:1}" | tr a-z A-Z)${CROP:1}"   # "Tomato" (the name CEDA uses)
+          python -m mandi.fetch_ceda "$commodity"
+
+      # Save right after the download (not at the end of the job), so the files are kept even if a later step fails.
+      - name: Save the CEDA files for later runs
+        if: steps.ceda_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw/ceda
+          key: ceda-${{ matrix.task.crop }}-v1
+
+      - name: Clean and run
+        env:
+          PYTHONPATH: src:.
+          MANDI_LGBM_THREADS: "1"   # 4 workers x 1 thread = 4 cores; 4 threads each made LightGBM ~30x slower
+          CROP: ${{ matrix.task.crop }}
+          STEP: ${{ matrix.task.step }}
+        run: |
+          set -euo pipefail
+          MANDI_CROP="$CROP" python -m mandi.run_phase1
+          MANDI_CROP="$CROP" python -m mandi.run_phase3 "$STEP" --workers 4
+
+      - name: Commit the result files back to the branch
+        env:
+          CROP: ${{ matrix.task.crop }}
+          STEP: ${{ matrix.task.step }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898338+github-actions[bot]@users.noreply.github.com"
+
+          # Add this crop's output folders that exist.
+          for path in "docs/$CROP" "results/$CROP" "configs/selected_models_$CROP.yaml"; do
+            if [ -e "$path" ]; then
+              git add "$path"
+            fi
+          done
+
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+          # The message has no pipeline tag, so this commit does not start the workflow again.
+          git commit -m "Pipeline results: $CROP $STEP (CI run ${{ github.run_id }}, commit ${GITHUB_SHA::7})"
+
+          # The other crop's job may have pushed first: take its commit, put ours on top, and try again.
+          # The two crops write to different folders, so this never mixes their files.
+          # If the same file changed (an older run of the same crop), our new version wins.
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase -X theirs origin "${{ github.ref_name }}"
+            if git push origin "HEAD:${{ github.ref_name }}"; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed, trying again in 10 s"
+            sleep 10
+          done
+          echo "Could not push the results after 5 attempts."
+          exit 1

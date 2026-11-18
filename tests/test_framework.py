@@ -67,6 +67,25 @@ def test_no_trades_gives_flat_equity_and_nan_ratios():
     assert s["trades"] == 0 and s["total_return_pct"] == 0 and np.isnan(s["win_rate_pct"])
 
 
+def test_entry_lag_trades_at_the_next_quote_and_keeps_the_signal_from_the_origin():
+    f = _frame([("A", "2020-01-01", 7, 100, 120, 110), ("A", "2020-01-03", 7, 105, 120, 100), ("A", "2020-01-20", 7, 100, 100, 100)])
+    r = trading.backtest_long_flat(f, threshold=0.03, entry_lag=True)
+    assert len(r.trades) == 1 and r.trades["ret"].iloc[0] == pytest.approx(120 / 105 - 1)   # signal on day 1 (+10%), filled at day 3's quote of 105
+    lagged = trading.with_entry_lag(f)
+    # day 3's next quote (day 20) is after its target date (day 10) and day 20 has no next quote: both rows are dropped
+    assert len(lagged) == 1 and lagged["origin"].iloc[0] == pd.Timestamp("2020-01-01")
+
+
+def test_concentration_and_adverse_excursion_on_known_trades():
+    trades = pd.DataFrame({"market": "A", "entry": pd.to_datetime(["2020-01-01", "2020-02-01"]), "exit": pd.to_datetime(["2020-01-08", "2020-02-08"]), "ret": [0.50, 0.10]})
+    c = trading.concentration(trades, n_markets=1, share=0.5)
+    assert c["top_trades"] == 1 and c["top_share_of_pnl_pct"] == pytest.approx(100 * 0.5 / 0.6) and c["pnl_without_top_pct_of_capital"] == pytest.approx(10.0)
+    days = pd.to_datetime(["2020-01-01", "2020-01-04", "2020-01-08"])
+    frame = pd.DataFrame({"market": "A", "origin": days, "p0": np.log([100.0, 70.0, 100.0])})       # fell 30% inside the trade, then recovered
+    t = pd.DataFrame({"market": "A", "entry": days[:1], "exit": days[2:], "ret": [0.0]})
+    assert trading.adverse_excursion(t, frame).iloc[0] == pytest.approx(-0.30)
+
+
 def test_momentum_signal_uses_only_past_prices():
     days = pd.date_range("2020-01-01", periods=30)
     f = pd.DataFrame({"market": "A", "origin": days, "target_date": days + pd.Timedelta(days=7), "p0": np.log(100.0 + np.arange(30)),

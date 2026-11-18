@@ -1,0 +1,9 @@
+model,cpu_seconds,fits,not_converged,cpu_seconds_per_fit
+ets|damped_trend,169.7,240,0,0.71
+ets|local_level,53.4,240,0,0.22
+lgbm|l1_nl8_mc20_n150,43.3,120,0,0.36
+lgbm|l1_nl8_mc60_n150,41.7,120,0,0.35
+prophet_anchored|cps0.05,219.9,239,0,0.92
+prophet|cps0.05,217.0,239,0,0.91
+prophet|cps0.3,447.9,239,0,1.87
+sarima|111_s7,321.9,240,1,1.34
