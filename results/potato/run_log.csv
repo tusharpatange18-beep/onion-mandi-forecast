@@ -1,2 +1,3 @@
 run_id,kind,when,commit,dirty,selection_commit,config_sha1,models,triples,wall_seconds
 tune_20261118_193307,tune,2026-11-18T19:33:07,977f77a,False,,84aa8b1b06,25,6809,349.8
+final_20261118_194415,final,2026-11-18T19:44:15,aded6c6,False,aded6c6,84aa8b1b06,8,10151,449.1
