@@ -1,0 +1,61 @@
+market,date,modal_price,rolling_median,ratio_to_median,robust_score,other_markets_same_day,guess
+Aurangabad district,2014-10-22,1700.0,2300,0.74,-9.5,none observed,uncertain (0 other market(s) quoted that day)
+Aurangabad district,2016-01-16,1700.0,850,2.0,7.7,Mumbai district 1000; Pune district 800; Solapur district 1150,likely error
+Aurangabad district,2016-12-21,2437.5,450,5.42,9.7,Mumbai district 550; Pune district 650; Solapur district 650,likely error
+Aurangabad district,2017-11-09,3750.0,575,6.52,28.5,Mumbai district 875; Pune district 700; Solapur district 800,likely error
+Aurangabad district,2019-11-12,900.0,1225,0.73,-10.2,Mumbai district 1600; Pune district 1333; Solapur district 1100,likely real
+Aurangabad district,2020-09-14,750.0,2500,0.3,-19.9,Mumbai district 2400; Pune district 2450; Solapur district 2600,likely error
+Aurangabad district,2022-05-30,700.0,1450,0.48,-14.0,Mumbai district 1600; Pune district 1588,likely error
+Mumbai district,2015-01-22,800.0,1350,0.59,-9.7,Aurangabad district 1000; Pune district 1275; Solapur district 1200,likely real
+Mumbai district,2016-10-20,700.0,1250,0.56,-9.8,Aurangabad district 1100; Pune district 1300; Solapur district 1375,likely error
+Mumbai district,2017-06-15,650.0,900,0.72,-16.3,Aurangabad district 650; Pune district 700; Solapur district 950,likely real
+Mumbai district,2018-07-17,2350.0,1600,1.47,8.4,Aurangabad district 1200; Pune district 1600; Solapur district 1500,likely error
+Mumbai district,2024-01-03,1800.0,1250,1.44,6.0,Aurangabad district 1200; Pune district 1460; Solapur district 1350,likely real
+Pune district,2014-01-04,100.0,1000,0.1,-10.5,Aurangabad district 1300; Solapur district 1600,likely error
+Pune district,2014-03-15,500.0,1137,0.44,-10.4,Mumbai district 1250,uncertain (1 other market(s) quoted that day)
+Pune district,2014-04-28,1100.0,1700,0.65,-9.8,Mumbai district 1725; Solapur district 1500,likely error
+Pune district,2014-04-29,1125.0,1700,0.66,-9.6,Solapur district 1550,uncertain (1 other market(s) quoted that day)
+Pune district,2014-08-10,3100.0,2200,1.41,17.1,Aurangabad district 2150,uncertain (1 other market(s) quoted that day)
+Pune district,2014-08-11,3075.0,2200,1.4,13.4,Aurangabad district 2100; Mumbai district 1725,likely error
+Pune district,2014-08-17,3100.0,2200,1.41,10.3,Aurangabad district 2150,uncertain (1 other market(s) quoted that day)
+Pune district,2014-10-21,2350.0,3250,0.72,-14.1,Aurangabad district 2200; Mumbai district 2050; Solapur district 2150,likely real
+Pune district,2014-11-19,1950.0,3187,0.61,-17.1,Aurangabad district 2250; Mumbai district 2200; Solapur district 2400,likely real
+Pune district,2015-05-21,675.0,925,0.73,-7.9,Aurangabad district 650; Mumbai district 1100; Solapur district 875,likely real
+Pune district,2015-12-19,100.0,950,0.11,-13.7,Aurangabad district 900; Mumbai district 950; Solapur district 1150,likely error
+Pune district,2016-06-01,1023.3333333333334,1600,0.64,-6.3,Aurangabad district 1500; Mumbai district 1450; Solapur district 1450,likely error
+Pune district,2016-11-10,2733.333333333333,1100,2.48,6.4,Aurangabad district 900; Mumbai district 1400; Solapur district 1350,likely error
+Pune district,2017-01-04,2500.0,700,3.57,11.6,Aurangabad district 400; Mumbai district 600; Solapur district 790,likely error
+Pune district,2017-08-02,3600.0,700,5.14,81.9,Aurangabad district 550; Mumbai district 900; Solapur district 875,likely error
+Pune district,2017-09-19,712.5,1000,0.71,-8.9,Aurangabad district 350; Mumbai district 900; Solapur district 700,likely real
+Pune district,2017-09-27,712.5,1000,0.71,-16.9,Aurangabad district 600; Mumbai district 900; Solapur district 850,likely real
+Pune district,2017-10-03,675.0,1000,0.68,-19.7,Aurangabad district 450; Mumbai district 880; Solapur district 680,likely real
+Pune district,2017-10-07,700.0,1000,0.7,-17.8,Aurangabad district 550; Mumbai district 875; Solapur district 825,likely real
+Pune district,2019-10-04,3233.333333333333,1267,2.55,9.9,Mumbai district 1300; Solapur district 1500,likely error
+Pune district,2020-09-12,1525.0,2362,0.65,-8.1,Aurangabad district 2400; Mumbai district 2500; Solapur district 2400,likely error
+Pune district,2021-02-17,1966.6666666666667,1055,1.86,10.9,Mumbai district 1150; Solapur district 1150,likely error
+Pune district,2021-05-15,1800.0,1187,1.52,6.0,Aurangabad district 900; Mumbai district 1300; Solapur district 1400,likely error
+Pune district,2021-05-23,850.0,1225,0.69,-8.7,Aurangabad district 1000,uncertain (1 other market(s) quoted that day)
+Pune district,2021-05-29,800.0,1229,0.65,-9.4,Aurangabad district 900; Mumbai district 1350; Solapur district 1200,likely real
+Pune district,2021-06-05,850.0,1235,0.69,-7.9,Aurangabad district 1000; Mumbai district 1350; Solapur district 1350,likely real
+Pune district,2024-02-18,3156.25,1400,2.25,11.2,Solapur district 1800,uncertain (1 other market(s) quoted that day)
+Pune district,2024-03-19,2325.0,1530,1.52,6.3,Aurangabad district 1400; Mumbai district 1450; Solapur district 1700,likely error
+Solapur district,2014-08-18,4025.0,2100,1.92,9.4,Aurangabad district 1900; Pune district 2200,likely error
+Solapur district,2015-04-28,450.0,800,0.56,-6.4,Aurangabad district 650; Mumbai district 1100; Pune district 800,likely error
+Solapur district,2015-07-01,2000.0,975,2.05,6.5,Aurangabad district 775; Mumbai district 1000; Pune district 1000,likely error
+Solapur district,2015-09-25,100.0,875,0.11,-17.0,Pune district 800,uncertain (1 other market(s) quoted that day)
+Solapur district,2015-11-06,2250.0,1000,2.25,10.7,Mumbai district 1100; Pune district 1100,likely error
+Solapur district,2015-12-05,2450.0,1150,2.13,15.8,Aurangabad district 800; Mumbai district 1000,likely error
+Solapur district,2016-05-26,965.0,1500,0.64,-8.8,Aurangabad district 1400; Mumbai district 1500; Pune district 1600,likely error
+Solapur district,2016-05-28,1050.0,1500,0.7,-7.1,Aurangabad district 1400; Mumbai district 1450; Pune district 1450,likely real
+Solapur district,2017-03-21,75.0,817,0.09,-23.7,Aurangabad district 650; Mumbai district 850; Pune district 800,likely error
+Solapur district,2017-08-19,1350.0,800,1.69,11.1,Aurangabad district 425; Mumbai district 800; Pune district 600,likely error
+Solapur district,2017-09-18,3650.0,800,4.56,11.4,Aurangabad district 400; Mumbai district 850; Pune district 900,likely error
+Solapur district,2018-08-03,140.0,1600,0.09,-51.8,Mumbai district 1650; Pune district 1350,likely error
+Solapur district,2019-01-01,700.0,1237,0.57,-7.6,Aurangabad district 600; Mumbai district 900; Pune district 1000,likely real
+Solapur district,2020-08-05,1500.0,2392,0.63,-7.5,Aurangabad district 2250; Mumbai district 2100; Pune district 2350,likely error
+Solapur district,2020-10-05,1275.0,2750,0.46,-7.9,Aurangabad district 2700; Mumbai district 2600; Pune district 1944,likely error
+Solapur district,2020-10-28,2200.0,3200,0.69,-8.2,Aurangabad district 3100; Mumbai district 3100; Pune district 2750,likely real
+Solapur district,2021-02-23,700.0,1100,0.64,-6.6,Aurangabad district 1000; Mumbai district 1100; Pune district 1044,likely error
+Solapur district,2022-10-07,850.0,2000,0.43,-11.3,Mumbai district 1800; Pune district 1850,likely error
+Solapur district,2023-08-23,6100.0,1450,4.21,27.6,Aurangabad district 1350; Mumbai district 1250; Pune district 1575,likely error
+Solapur district,2024-01-29,2775.0,1600,1.73,6.1,Aurangabad district 950; Mumbai district 1050; Pune district 1283,likely error

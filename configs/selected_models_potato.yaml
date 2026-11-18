@@ -1,0 +1,43 @@
+# Written by `python -m mandi.run_phase3 tune`. Commit this file BEFORE running `final`.
+tuning_run: tune_20261118_193307
+window:
+- '2017-01-01'
+- '2019-12-31'
+chosen:
+  7:
+    ets: ets|damped_trend
+    lgbm: lgbm|l1_nl8_mc20_n400
+    prophet: prophet|cps0.3
+    prophet_anchored: prophet_anchored|cps0.05
+    sarima: sarima|111_s7
+  30:
+    ets: ets|local_level
+    lgbm: lgbm|l1_nl8_mc20_n150
+    prophet: prophet|cps0.3
+    prophet_anchored: prophet_anchored|cps0.05
+    sarima: sarima|111
+best_model_by_validation:
+- market: Aurangabad district
+  h: 7
+  model: lgbm
+- market: Aurangabad district
+  h: 30
+  model: ets
+- market: Mumbai district
+  h: 7
+  model: ets
+- market: Mumbai district
+  h: 30
+  model: ets
+- market: Pune district
+  h: 7
+  model: lgbm
+- market: Pune district
+  h: 30
+  model: sarima
+- market: Solapur district
+  h: 7
+  model: lgbm
+- market: Solapur district
+  h: 30
+  model: lgbm
