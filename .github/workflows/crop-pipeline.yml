@@ -87,6 +87,33 @@ jobs:
           path: data/raw/ceda
           key: ceda-${{ matrix.task.crop }}-v1
 
+      # Backup copy of the CEDA files in a PRIVATE repository (raw data is never put in this public repository).
+      # Needs the secret CEDA_DATA_TOKEN: a token that can read that repository. Without the secret this step does nothing.
+      - name: Copy CEDA files from the private data repository
+        env:
+          DATA_TOKEN: ${{ secrets.CEDA_DATA_TOKEN }}
+          DATA_REPO: tusharpatange18-beep/mandi-ceda-data
+          CROP: ${{ matrix.task.crop }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATA_TOKEN" ]; then
+            echo "No CEDA_DATA_TOKEN secret: skipping the private copy."
+            exit 0
+          fi
+          git clone --quiet --depth 1 "https://x-access-token:${DATA_TOKEN}@github.com/${DATA_REPO}.git" /tmp/ceda-data
+          mkdir -p data/raw/ceda
+          # Copy this crop's files, but keep any file that is already there (from the cache).
+          for file in /tmp/ceda-data/"$CROP"_*.csv; do
+            if [ ! -e "$file" ]; then
+              continue   # no file for this crop in the private repository
+            fi
+            name=$(basename "$file")
+            if [ ! -e "data/raw/ceda/$name" ]; then
+              cp "$file" "data/raw/ceda/$name"
+              echo "Copied $name"
+            fi
+          done
+
       - name: Download from CEDA (skips files that are already there)
         env:
           PYTHONPATH: src:.
